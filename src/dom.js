@@ -427,12 +427,22 @@
     return Array.from(document.querySelectorAll("[data-message-author-role='assistant']"));
   }
 
+  function getUserTurnCount() {
+    const turns = document.querySelectorAll("section[data-turn='user']");
+    if (turns.length > 0) {
+      return turns.length;
+    }
+    return document.querySelectorAll("[data-message-author-role='user']").length;
+  }
+
   function getAssistantMessageRecords() {
-    return getAssistantTurns().map((turn) => {
+    return getAssistantTurns().map((turn, index) => {
       const message = getMessageNode(turn);
       const markdown = getMarkdownNode(turn);
       return {
+        index,
         turn,
+        turnId: getTurnId(turn),
         messageId: message ? message.getAttribute("data-message-id") || "" : "",
         text: markdown ? getReadableText(markdown).trim() : ""
       };
@@ -495,6 +505,7 @@
     const composer = editor ? findComposerScope(editor) : document;
     const scope = composer || document;
     const hasPromptText = Boolean(options.hasPromptText) || getPromptText().trim().length > 0;
+    const allowVoiceLabel = Boolean(options.allowVoiceLabel);
     const preferred = scope.querySelector([
       "[data-testid='send-button']:not([disabled])",
       "[data-testid='composer-submit-button']:not([disabled])",
@@ -503,21 +514,14 @@
       "button[aria-label*='Send']:not([disabled])",
       "button[class*='composer-submit-button-color']:not([disabled])"
     ].join(","));
-    if (preferred && (hasPromptText || isExplicitSendButton(preferred))) {
+    if (preferred && isSendCandidate(preferred, { hasPromptText, allowVoiceLabel })) {
       return preferred;
     }
 
     const buttons = Array.from(scope.querySelectorAll("button:not([disabled])"));
     const editorRect = editor ? editor.getBoundingClientRect() : null;
     const candidates = buttons.filter((button) => {
-      const label = `${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`.toLowerCase();
-      if (button.className && String(button.className).includes("composer-submit-button-color") && hasPromptText) {
-        return true;
-      }
-      if (/添加|文件|attach|听写|model|模型|工具|tool|分享|share|export/.test(label)) {
-        return false;
-      }
-      if (/voice|语音/.test(label) && !hasPromptText) {
+      if (!isSendCandidate(button, { hasPromptText, allowVoiceLabel })) {
         return false;
       }
       if (!editorRect) {
@@ -538,6 +542,23 @@
     })[0] || null;
   }
 
+  function isSendCandidate(button, options) {
+    const label = `${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`.toLowerCase();
+    const className = String(button.className || "");
+    const hasSubmitClass = className.includes("composer-submit-button-color");
+
+    if (/添加|文件|attach|听写|model|模型|工具|tool|分享|share|export/.test(label)) {
+      return false;
+    }
+    if (/voice|语音/.test(label) && !options.allowVoiceLabel) {
+      return false;
+    }
+    if (isExplicitSendButton(button)) {
+      return true;
+    }
+    return Boolean(options.hasPromptText && hasSubmitClass);
+  }
+
   function findComposerScope(editor) {
     return editor.closest("form[data-type='unified-composer']")
       || editor.closest("form")
@@ -555,7 +576,8 @@
   async function waitForSendButton(options = {}) {
     const startedAt = Date.now();
     while (Date.now() - startedAt < 2500) {
-      const button = findSendButton(options);
+      const allowVoiceLabel = Date.now() - startedAt > 900;
+      const button = findSendButton({ ...options, allowVoiceLabel });
       if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") {
         return button;
       }
@@ -569,14 +591,93 @@
       throw new Error("找不到 ChatGPT 主输入框。");
     }
 
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const initialUserTurnCount = getUserTurnCount();
     const button = await waitForSendButton({ hasPromptText: Boolean(text && text.trim()) });
-    if (!button) {
-      throw new Error("找不到 ChatGPT 发送按钮。");
+    if (button) {
+      clickElement(button);
+      if (await waitForSubmissionStarted(initialUserTurnCount)) {
+        return;
+      }
     }
-    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
-    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-    button.click();
+
+    pressEnterOnPrompt();
+    if (await waitForSubmissionStarted(initialUserTurnCount)) {
+      return;
+    }
+
+    submitComposerForm();
+    if (await waitForSubmissionStarted(initialUserTurnCount)) {
+      return;
+    }
+
+    throw new Error("无法触发 ChatGPT 发送，请手动点击主输入框发送按钮。");
+  }
+
+  function clickElement(element) {
+    const rect = element.getBoundingClientRect();
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    };
+    element.dispatchEvent(new PointerEvent("pointerover", { ...eventInit, pointerType: "mouse" }));
+    element.dispatchEvent(new MouseEvent("mouseover", eventInit));
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...eventInit, pointerType: "mouse" }));
+    element.dispatchEvent(new MouseEvent("mousedown", eventInit));
+    element.dispatchEvent(new PointerEvent("pointerup", { ...eventInit, pointerType: "mouse" }));
+    element.dispatchEvent(new MouseEvent("mouseup", eventInit));
+    element.dispatchEvent(new MouseEvent("click", eventInit));
+    element.click();
+  }
+
+  function pressEnterOnPrompt() {
+    const editor = getPromptEditor();
+    if (!editor) {
+      return;
+    }
+    editor.focus();
+    const eventInit = {
+      key: "Enter",
+      code: "Enter",
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true
+    };
+    editor.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+    editor.dispatchEvent(new KeyboardEvent("keypress", eventInit));
+    editor.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+  }
+
+  function submitComposerForm() {
+    const editor = getPromptEditor();
+    const form = editor ? editor.closest("form") : null;
+    if (!form) {
+      return;
+    }
+    if (typeof form.requestSubmit === "function") {
+      try {
+        form.requestSubmit();
+        return;
+      } catch (_error) {
+        // Fall through to a synthetic submit event.
+      }
+    }
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  }
+
+  async function waitForSubmissionStarted(initialUserTurnCount) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 1800) {
+      if (getUserTurnCount() > initialUserTurnCount || getPromptText().trim() === "") {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    return false;
   }
 
   globalThis.CGQADom = {

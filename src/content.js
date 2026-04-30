@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.2.0-stable-flow";
+  const CONTENT_VERSION = "0.2.1-submit-tracking";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -24,6 +24,9 @@
     restoring: false,
     cleanupTasks: []
   };
+
+  const RESPONSE_STABLE_DELAY_MS = 1400;
+  const RESPONSE_TIMEOUT_MS = 120000;
 
   let sidebar = null;
 
@@ -350,10 +353,7 @@
     thread.messages.push(userMessage, assistantMessage);
     await saveAndRenderThread(thread);
 
-    state.pendingResponse = {
-      threadId: thread.threadId,
-      knownMessageIds: new Set(CGQADom.getAssistantMessageRecords().map((record) => record.messageId).filter(Boolean))
-    };
+    state.pendingResponse = createResponseTracker(thread.threadId);
 
     try {
       await CGQADom.submitPrompt(buildPrompt(thread, question));
@@ -364,6 +364,18 @@
       await saveAndRenderThread(thread);
       CGQASidebar.showToast(assistantMessage.content);
     }
+  }
+
+  function createResponseTracker(threadId) {
+    const baselineRecords = CGQADom.getAssistantMessageRecords();
+    return {
+      threadId,
+      baselineCount: baselineRecords.length,
+      knownSignatures: new Set(baselineRecords.map(getAssistantRecordSignature)),
+      candidateSignature: "",
+      startedAt: Date.now(),
+      lastText: ""
+    };
   }
 
   function capturePendingAssistantIfReady() {
@@ -383,16 +395,25 @@
       return;
     }
 
-    const newRecord = CGQADom.getAssistantMessageRecords().find((record) => {
-      return record.messageId && !state.pendingResponse.knownMessageIds.has(record.messageId);
-    });
+    if (Date.now() - state.pendingResponse.startedAt > RESPONSE_TIMEOUT_MS) {
+      generating.content = generating.content === "生成中..." ? "回答等待超时，请在主聊天中查看结果。" : generating.content;
+      generating.status = "failed";
+      state.pendingResponse = null;
+      saveAndRenderThread(thread);
+      return;
+    }
+
+    const newRecord = findPendingAssistantRecord(thread);
     if (!newRecord || !newRecord.text) {
       return;
     }
 
+    const signature = getAssistantRecordSignature(newRecord);
+    state.pendingResponse.candidateSignature = signature;
+    state.pendingResponse.lastText = newRecord.text;
     clearTimeout(capturePendingAssistantIfReady.timer);
     capturePendingAssistantIfReady.timer = setTimeout(async () => {
-      const latest = CGQADom.getAssistantMessageRecords().find((record) => record.messageId === newRecord.messageId);
+      const latest = findAssistantRecordBySignature(signature) || findPendingAssistantRecord(thread);
       const text = latest ? latest.text : newRecord.text;
       if (!text || text === generating.content || text === thread.quoteText) {
         return;
@@ -401,7 +422,57 @@
       generating.status = "completed";
       state.pendingResponse = null;
       await saveAndRenderThread(thread);
-    }, 1200);
+    }, RESPONSE_STABLE_DELAY_MS);
+  }
+
+  function findPendingAssistantRecord(thread) {
+    const records = CGQADom.getAssistantMessageRecords();
+    const tracker = state.pendingResponse;
+    if (!tracker) {
+      return null;
+    }
+
+    const explicitNewRecord = records.find((record) => {
+      return record.text
+        && !tracker.knownSignatures.has(getAssistantRecordSignature(record))
+        && isUsableAssistantAnswer(record.text, thread);
+    });
+    if (explicitNewRecord) {
+      return explicitNewRecord;
+    }
+
+    if (records.length > tracker.baselineCount) {
+      const appendedRecord = records[records.length - 1];
+      if (appendedRecord && appendedRecord.text && isUsableAssistantAnswer(appendedRecord.text, thread)) {
+        return appendedRecord;
+      }
+    }
+
+    return null;
+  }
+
+  function findAssistantRecordBySignature(signature) {
+    return CGQADom.getAssistantMessageRecords().find((record) => {
+      return getAssistantRecordSignature(record) === signature;
+    });
+  }
+
+  function getAssistantRecordSignature(record) {
+    if (record.messageId) {
+      return `message:${record.messageId}`;
+    }
+    if (record.turnId) {
+      return `turn:${record.turnId}`;
+    }
+    return `index:${record.index}`;
+  }
+
+  function isUsableAssistantAnswer(text, thread) {
+    const normalized = (text || "").trim();
+    if (!normalized || normalized === "生成中..." || normalized === thread.quoteText) {
+      return false;
+    }
+    return true;
   }
 
   async function deleteActiveThread() {
