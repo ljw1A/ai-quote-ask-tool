@@ -38,17 +38,17 @@
       "z-index: 2147483647 !important",
       "display: flex !important",
       "flex-direction: column !important",
-      "width: min(380px, calc(100vw - 24px)) !important",
-      "max-height: min(640px, calc(100vh - 48px)) !important",
+      "width: min(326px, calc(100vw - 24px)) !important",
+      "max-height: min(604px, calc(100vh - 48px)) !important",
       "overflow: hidden !important",
       "visibility: visible !important",
       "opacity: 1 !important",
       "pointer-events: auto !important",
       "color: #1f2933 !important",
-      "background: rgba(255,255,255,0.98) !important",
-      "border: 1px solid rgba(212,219,226,0.95) !important",
-      "border-radius: 18px !important",
-      "box-shadow: 0 18px 60px rgba(15,23,42,0.20), 0 4px 18px rgba(15,23,42,0.10) !important",
+      "background: rgba(255,255,255,0.97) !important",
+      "border: 1px solid rgba(229,231,235,0.95) !important",
+      "border-radius: 16px !important",
+      "box-shadow: 0 18px 45px rgba(15,23,42,0.14), 0 3px 12px rgba(15,23,42,0.08) !important",
       "font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important"
     ].join(";");
   }
@@ -88,6 +88,9 @@
       if (!input) {
         return;
       }
+      if (root && root.dataset.cgqaInputDisabled === "true") {
+        return;
+      }
       input.disabled = false;
       input.focus();
     }
@@ -121,6 +124,8 @@
     panel.id = "cgqa-root";
     panel.setAttribute("aria-live", "polite");
     applyPanelStyle(panel);
+    const inputDisabled = Boolean(thread.help || hasGeneratingMessage(thread));
+    panel.dataset.cgqaInputDisabled = inputDisabled ? "true" : "false";
 
     const header = createElement("header", "cgqa-panel-header");
     const titleWrap = createElement("div", "cgqa-panel-title-wrap");
@@ -135,6 +140,7 @@
     bindPanelDrag(panel, header);
 
     const quote = createElement("blockquote", "cgqa-quote-preview", thread.quoteText || "");
+    quote.hidden = Boolean(thread.help);
     const messages = createElement("div", "cgqa-messages");
     if (thread.help) {
       messages.append(createElement("div", "cgqa-empty", "当前会话还没有批注引用。"));
@@ -149,9 +155,11 @@
     const input = createElement("textarea", "cgqa-input");
     input.placeholder = "继续追问这个引用...";
     input.rows = 1;
+    input.disabled = inputDisabled;
     const send = createElement("button", "cgqa-send-button", "↑");
     send.type = "button";
     send.title = "发送";
+    send.disabled = inputDisabled;
     send.addEventListener("click", () => callbacks.onSend(input.value));
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -246,7 +254,7 @@
   function getPanelSize(panel) {
     const rect = panel.getBoundingClientRect();
     return {
-      width: rect.width || Math.min(380, window.innerWidth - PANEL_MARGIN * 2),
+      width: rect.width || Math.min(326, window.innerWidth - PANEL_MARGIN * 2),
       height: rect.height || Math.min(640, window.innerHeight - PANEL_MARGIN * 2)
     };
   }
@@ -297,18 +305,49 @@
     }
   }
 
+  function hasGeneratingMessage(thread) {
+    return Boolean(thread && Array.isArray(thread.messages) && thread.messages.some((message) => {
+      return message.role === "assistant" && message.status === "generating";
+    }));
+  }
+
   function renderMessage(message) {
     const item = createElement("article", `cgqa-message cgqa-message-${message.role}`);
+    const content = createElement("div", "cgqa-message-content");
+    const labelRow = createElement("div", "cgqa-message-label-row");
     const meta = createElement("div", "cgqa-message-meta", message.role === "user" ? "你" : "ChatGPT");
     const body = createElement("div", "cgqa-message-body", message.content || "");
+    const createdAt = getValidDate(message.createdAt);
+    const time = createElement("time", "cgqa-message-time", formatMessageTime(createdAt));
+    if (createdAt) {
+      time.dateTime = createdAt.toISOString();
+    }
     if (message.status === "generating") {
       body.classList.add("is-generating");
     }
     if (message.status === "failed") {
       body.classList.add("is-failed");
     }
-    item.append(meta, body);
+    labelRow.append(meta);
+    body.append(time);
+    content.append(labelRow, body);
+    item.append(content);
     return item;
+  }
+
+  function getValidDate(timestamp) {
+    if (!timestamp) {
+      return null;
+    }
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function formatMessageTime(date) {
+    if (!date) {
+      return "";
+    }
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
   function showSelectionMenu(rect, onAnnotate) {

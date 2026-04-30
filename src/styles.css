@@ -33,8 +33,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px 10px;
+  gap: 14px;
+  padding: 18px 18px 8px;
 }
 
 .cgqa-panel-drag-handle {
@@ -54,15 +54,15 @@
 .cgqa-panel-title {
   margin: 0;
   color: #111827;
-  font-size: 17px;
-  line-height: 24px;
-  font-weight: 650;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 680;
 }
 
 .cgqa-panel-subtitle {
-  margin-top: 6px;
-  color: #7b8491;
-  font-size: 13px;
+  margin-top: 5px;
+  color: #7b8794;
+  font-size: 12px;
   line-height: 18px;
 }
 
@@ -77,12 +77,12 @@
 }
 
 .cgqa-icon-button {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   color: #111827;
   background: transparent;
   border-radius: 999px;
-  font-size: 19px;
+  font-size: 18px;
   line-height: 1;
 }
 
@@ -91,77 +91,81 @@
 }
 
 .cgqa-quote-preview {
-  max-height: 88px;
-  margin: 0 20px 12px;
+  max-height: 68px;
+  margin: 0 18px 10px;
   overflow: auto;
-  color: #52606d;
-  background: #f6faf8;
-  border: 1px solid #dbe9e2;
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 13px;
-  line-height: 19px;
+  color: #697586;
+  background: #fbfcfc;
+  border: 1px solid #edf0f2;
+  border-radius: 11px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .cgqa-messages {
   display: flex;
-  min-height: 160px;
+  min-height: 178px;
   overflow: auto;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
-  padding: 4px 20px 16px;
+  gap: 16px;
+  padding: 4px 18px 16px;
 }
 
 .cgqa-empty {
-  color: #8792a0;
+  color: #8b95a1;
+  background: #f8faf9;
+  border: 1px dashed #dce4e0;
+  border-radius: 12px;
+  padding: 13px 14px;
   font-size: 13px;
   line-height: 20px;
 }
 
 .cgqa-message {
-  display: grid;
-  grid-template-columns: 30px 1fr;
-  gap: 9px;
-  align-items: start;
+  display: block;
+}
+
+.cgqa-message-content {
+  min-width: 0;
+}
+
+.cgqa-message-label-row {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
 }
 
 .cgqa-message-meta {
   color: #111827;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 680;
   line-height: 24px;
 }
 
-.cgqa-message-assistant .cgqa-message-meta {
-  grid-column: 1 / -1;
-  padding-left: 30px;
-}
-
-.cgqa-message-assistant .cgqa-message-body {
-  grid-column: 1 / -1;
-  margin-left: 30px;
-}
-
 .cgqa-message-body {
+  position: relative;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #243240;
-  background: #f7f8f8;
-  border: 1px solid #e6eaee;
-  border-radius: 14px;
-  padding: 12px 14px;
-  font-size: 14px;
-  line-height: 23px;
+  color: #374151;
+  background: #f8faf9;
+  border: 1px solid #eef1f1;
+  border-radius: 13px;
+  padding: 12px 13px 24px;
+  font-size: 13px;
+  line-height: 22px;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
 }
 
 .cgqa-message-user .cgqa-message-body {
-  background: linear-gradient(135deg, #f5fbf8, #eef8f2);
-  border-color: #daeae1;
+  background: linear-gradient(135deg, #f7fbf8, #f1f7f3);
+  border-color: #e0e8e2;
 }
 
 .cgqa-message-body.is-generating {
   color: #6b7280;
+  background: #f8fafc;
 }
 
 .cgqa-message-body.is-failed {
@@ -170,33 +174,42 @@
   background: #fff1f2;
 }
 
+.cgqa-message-time {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  color: #a1a8b3;
+  font-size: 10px;
+  line-height: 12px;
+}
+
 .cgqa-panel-footer {
-  padding: 12px 20px 18px;
-  border-top: 1px solid #edf0f2;
+  padding: 12px 18px 14px;
+  border-top: 1px solid #eef1f2;
 }
 
 .cgqa-input-row {
   display: flex;
   align-items: end;
-  gap: 10px;
-  padding: 8px;
+  gap: 8px;
+  padding: 7px;
   background: #fff;
-  border: 1px solid #e2e8ed;
-  border-radius: 18px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e8edf0;
+  border-radius: 17px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .cgqa-input {
-  min-height: 36px;
-  max-height: 110px;
+  min-height: 34px;
+  max-height: 96px;
   flex: 1;
   resize: vertical;
   color: #111827;
   background: transparent;
   border: 0;
   outline: 0;
-  padding: 8px 6px;
-  font-size: 14px;
+  padding: 8px 7px;
+  font-size: 13px;
   line-height: 20px;
 }
 
@@ -204,10 +217,15 @@
   color: #a0a8b2;
 }
 
+.cgqa-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .cgqa-send-button {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
@@ -222,18 +240,23 @@
   background: #0f9f50;
 }
 
+.cgqa-send-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .cgqa-panel-actions {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 9px;
+  margin-top: 8px;
 }
 
 .cgqa-text-button {
-  color: #64748b;
+  color: #7b8491;
   background: transparent;
   padding: 3px 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .cgqa-text-button:hover {
