@@ -1,6 +1,11 @@
 (function () {
   "use strict";
 
+  if (globalThis.CGQAContentLoaded) {
+    return;
+  }
+  globalThis.CGQAContentLoaded = true;
+
   const state = {
     conversationId: "",
     threads: [],
@@ -9,7 +14,8 @@
     pendingResponse: null,
     observer: null,
     restoreTimer: 0,
-    restoring: false
+    restoring: false,
+    creatingThread: false
   };
 
   let sidebar = null;
@@ -84,7 +90,11 @@
     state.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
 
-  function onMouseUp() {
+  function onMouseUp(event) {
+    if (eventTargetIsPluginUi(event.target)) {
+      return;
+    }
+
     setTimeout(() => {
       const selection = window.getSelection();
       const result = CGQADom.validateSelection(selection);
@@ -102,53 +112,84 @@
     }, 0);
   }
 
+  function eventTargetIsPluginUi(target) {
+    return Boolean(target && target.closest && target.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast"));
+  }
+
   async function createThreadFromSelection() {
-    const selection = state.pendingSelection;
-    CGQASidebar.hideSelectionMenu();
-    if (!selection || !selection.ok) {
+    if (state.creatingThread) {
       return;
     }
 
-    if (selection.complex) {
-      CGQASidebar.showToast("当前选区包含公式或代码结构，将使用保守标记。");
+    state.creatingThread = true;
+    const selection = state.pendingSelection;
+    CGQASidebar.hideSelectionMenu();
+    if (!selection || !selection.ok) {
+      state.creatingThread = false;
+      return;
     }
 
-    const now = Date.now();
-    const quoteId = uid("quote");
-    const threadId = uid("thread");
-    const thread = {
-      threadId,
-      quoteId,
-      quoteText: selection.exactText || selection.selectedText,
-      sourceConversationId: state.conversationId,
-      sourceTurnId: CGQADom.getTurnId(selection.turn),
-      sourceMessageId: CGQADom.getMessageId(selection.turn),
-      displayIndex: state.threads.length + 1,
-      anchor: {
+    try {
+      if (selection.complex) {
+        CGQASidebar.showToast("当前选区包含公式或代码结构，将使用保守标记。");
+      }
+
+      const now = Date.now();
+      const quoteId = uid("quote");
+      const threadId = uid("thread");
+      const thread = {
+        threadId,
         quoteId,
+        quoteText: selection.exactText || selection.selectedText,
         sourceConversationId: state.conversationId,
         sourceTurnId: CGQADom.getTurnId(selection.turn),
         sourceMessageId: CGQADom.getMessageId(selection.turn),
-        startOffset: selection.startOffset,
-        endOffset: selection.endOffset,
-        exactText: selection.exactText || selection.selectedText,
-        prefixText: selection.prefixText || "",
-        suffixText: selection.suffixText || "",
-        threadId
-      },
-      messages: [],
-      createdAt: now,
-      updatedAt: now
-    };
+        displayIndex: state.threads.length + 1,
+        anchor: {
+          quoteId,
+          sourceConversationId: state.conversationId,
+          sourceTurnId: CGQADom.getTurnId(selection.turn),
+          sourceMessageId: CGQADom.getMessageId(selection.turn),
+          startOffset: selection.startOffset,
+          endOffset: selection.endOffset,
+          exactText: selection.exactText || selection.selectedText,
+          prefixText: selection.prefixText || "",
+          suffixText: selection.suffixText || "",
+          threadId
+        },
+        messages: [],
+        createdAt: now,
+        updatedAt: now
+      };
 
-    state.threads.push(thread);
-    await CGQAStorage.saveThread(thread);
-    const rendered = CGQADom.renderThreadMark(thread);
-    if (!rendered) {
-      CGQASidebar.showToast("已创建批注，但当前 DOM 无法安全渲染正文标记。");
+      state.threads.push(thread);
+      openThread(threadId);
+
+      CGQAStorage.saveThread(thread).catch((error) => {
+        console.error("[CGQA] save thread failed", error);
+        CGQASidebar.showToast("批注已打开，但本地保存失败。");
+      });
+
+      try {
+        const rendered = CGQADom.renderThreadMark(thread);
+        if (!rendered) {
+          CGQASidebar.showToast("已创建批注，但当前 DOM 无法安全渲染正文标记。");
+        }
+      } catch (error) {
+        console.error("[CGQA] render mark failed", error);
+        CGQASidebar.showToast("已打开批注小窗，但正文标记渲染失败。");
+      }
+
+      const currentSelection = window.getSelection();
+      if (currentSelection) {
+        currentSelection.removeAllRanges();
+      }
+    } catch (error) {
+      console.error("[CGQA] create thread failed", error);
+      CGQASidebar.showToast("创建批注失败，请刷新页面后重试。");
+    } finally {
+      state.creatingThread = false;
     }
-    openThread(threadId);
-    window.getSelection().removeAllRanges();
   }
 
   function openThread(threadId) {

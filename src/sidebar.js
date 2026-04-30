@@ -67,8 +67,10 @@
 
       root.hidden = false;
       title.textContent = `引用 ${thread.displayIndex}`;
+      subtitle.textContent = "围绕该引用继续提问";
       quote.textContent = thread.quoteText || "";
       input.value = "";
+      input.disabled = false;
       messages.innerHTML = "";
 
       if (!thread.messages || thread.messages.length === 0) {
@@ -119,11 +121,17 @@
     const menu = createElement("div", "cgqa-selection-menu");
     const button = createElement("button", "", "批注");
     button.type = "button";
-    button.addEventListener("mousedown", (event) => event.preventDefault());
-    button.addEventListener("click", (event) => {
+    const submit = (event) => {
       event.preventDefault();
+      event.stopPropagation();
+      if (menu.dataset.submitted === "true") {
+        return;
+      }
+      menu.dataset.submitted = "true";
       onAnnotate();
-    });
+    };
+    button.addEventListener("pointerdown", submit);
+    button.addEventListener("click", submit);
     menu.append(button);
     document.documentElement.appendChild(menu);
 
