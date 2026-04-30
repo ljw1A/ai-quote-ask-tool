@@ -329,3 +329,7 @@
 .cgqa-main-turn-hidden {
   display: none !important;
 }
+
+.cgqa-composer-hidden {
+  display: none !important;
+}

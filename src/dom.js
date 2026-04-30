@@ -3,6 +3,7 @@
 
   const MARK_SELECTOR = ".cgqa-quote-mark";
   const HIDDEN_TURN_CLASS = "cgqa-main-turn-hidden";
+  const HIDDEN_COMPOSER_CLASS = "cgqa-composer-hidden";
   const BAD_SELECTION_SELECTOR = [
     ".cgqa-root",
     ".cgqa-selection-menu",
@@ -591,6 +592,41 @@
       || document.querySelector("textarea[name='prompt-textarea']");
   }
 
+  function getComposerContainer() {
+    const editor = getPromptEditor();
+    if (editor) {
+      return findComposerScope(editor);
+    }
+    return document.querySelector("form[data-type='unified-composer']")
+      || document.querySelector("[data-composer-surface]")?.parentElement
+      || null;
+  }
+
+  function setMainComposerHidden(hidden) {
+    const composer = hidden ? getComposerContainer() : null;
+
+    document.querySelectorAll(`.${HIDDEN_COMPOSER_CLASS}`).forEach((node) => {
+      if (!hidden || node !== composer) {
+        node.classList.remove(HIDDEN_COMPOSER_CLASS);
+        delete node.dataset.cgqaComposerHidden;
+      }
+    });
+
+    if (!hidden) {
+      return;
+    }
+
+    if (!composer || composer === document || composer.closest(".cgqa-root")) {
+      return;
+    }
+    if (!composer.classList.contains(HIDDEN_COMPOSER_CLASS)) {
+      composer.classList.add(HIDDEN_COMPOSER_CLASS);
+    }
+    if (composer.dataset.cgqaComposerHidden !== "true") {
+      composer.dataset.cgqaComposerHidden = "true";
+    }
+  }
+
   function getPromptText() {
     const editor = getPromptEditor();
     if (!editor) {
@@ -828,6 +864,7 @@
     getAssistantMessageRecords,
     getLastAssistantText,
     syncHiddenMainTurns,
+    setMainComposerHidden,
     submitPrompt
   };
 })();
