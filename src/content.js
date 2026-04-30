@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.2.3-hide-main-composer";
+  const CONTENT_VERSION = "0.2.4-visual-hide-composer";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -21,7 +21,6 @@
     observer: null,
     restoreTimer: 0,
     creatingThread: false,
-    sendingThroughComposer: false,
     restoring: false,
     cleanupTasks: []
   };
@@ -374,7 +373,7 @@
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
 
     try {
-      await withMainComposerAvailable(() => CGQADom.submitPrompt(buildPrompt(thread, question, mainChatItem.promptToken)));
+      await CGQADom.submitPrompt(buildPrompt(thread, question, mainChatItem.promptToken));
       syncMainChatVisibility();
     } catch (error) {
       state.pendingResponse = null;
@@ -423,18 +422,7 @@
     if (!CGQADom.setMainComposerHidden) {
       return;
     }
-    CGQADom.setMainComposerHidden(Boolean(state.activeThreadId) && !state.sendingThroughComposer);
-  }
-
-  async function withMainComposerAvailable(callback) {
-    state.sendingThroughComposer = true;
-    syncMainComposerVisibility();
-    try {
-      return await callback();
-    } finally {
-      state.sendingThroughComposer = false;
-      syncMainComposerVisibility();
-    }
+    CGQADom.setMainComposerHidden(Boolean(state.activeThreadId));
   }
 
   function createResponseTracker(threadId, promptToken) {
