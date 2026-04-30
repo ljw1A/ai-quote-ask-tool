@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.2.8-panel-layout-polish";
+  const CONTENT_VERSION = "0.2.9-send-state-controls";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -340,7 +340,7 @@
     state.activeThreadId = "";
     CGQADom.setActiveMark("");
     sidebar.render(null);
-    syncMainComposerVisibility();
+    syncPageDecorations();
   }
 
   function togglePanel() {
@@ -422,6 +422,8 @@
     }
     if (state.pendingResponse || hasGeneratingMessage(thread)) {
       CGQASidebar.showToast("上一条追问仍在生成中，请稍后再发。");
+      renderSavedThread(thread);
+      sidebar.focusInput();
       return;
     }
 
@@ -442,19 +444,19 @@
     };
     thread.messages.push(userMessage, assistantMessage);
     await saveAndRenderThread(thread);
-    syncMainChatVisibility();
+    syncPageDecorations();
 
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
 
     try {
       await CGQADom.submitPrompt(buildPrompt(thread, question, mainChatItem.promptToken));
-      syncMainChatVisibility();
+      syncPageDecorations();
     } catch (error) {
       state.pendingResponse = null;
       assistantMessage.content = error.message || "发送失败。";
       assistantMessage.status = "failed";
       await saveAndRenderThread(thread);
-      syncMainChatVisibility();
+      syncPageDecorations();
       CGQASidebar.showToast(assistantMessage.content);
     }
   }
@@ -506,9 +508,17 @@
     CGQADom.setMainComposerHidden(Boolean(state.activeThreadId));
   }
 
+  function syncNativeGenerationControlsVisibility() {
+    if (!CGQADom.setNativeGenerationControlsHidden) {
+      return;
+    }
+    CGQADom.setNativeGenerationControlsHidden(Boolean(state.activeThreadId));
+  }
+
   function syncPageDecorations() {
     syncMainChatVisibility();
     syncMainComposerVisibility();
+    syncNativeGenerationControlsVisibility();
   }
 
   function createResponseTracker(threadId, promptToken) {
@@ -571,7 +581,7 @@
       generating.status = "completed";
       state.pendingResponse = null;
       await saveAndRenderThread(thread);
-      syncMainChatVisibility();
+      syncPageDecorations();
     }, RESPONSE_STABLE_DELAY_MS);
   }
 
@@ -687,6 +697,9 @@
     }
     if (CGQADom.setMainComposerHidden) {
       CGQADom.setMainComposerHidden(false);
+    }
+    if (CGQADom.setNativeGenerationControlsHidden) {
+      CGQADom.setNativeGenerationControlsHidden(false);
     }
   }
 

@@ -4,6 +4,7 @@
   const MARK_SELECTOR = ".cgqa-quote-mark";
   const HIDDEN_TURN_CLASS = "cgqa-main-turn-hidden";
   const HIDDEN_COMPOSER_CLASS = "cgqa-composer-hidden";
+  const HIDDEN_NATIVE_CONTROL_CLASS = "cgqa-native-control-hidden";
   const BAD_SELECTION_SELECTOR = [
     ".cgqa-root",
     ".cgqa-selection-menu",
@@ -639,6 +640,78 @@
     }
   }
 
+  function setNativeGenerationControlsHidden(hidden) {
+    document.querySelectorAll(`.${HIDDEN_NATIVE_CONTROL_CLASS}`).forEach((node) => {
+      unhideNativeGenerationControl(node);
+    });
+
+    if (!hidden) {
+      return;
+    }
+
+    getNativeGenerationControlCandidates().forEach((node) => {
+      hideNativeGenerationControl(node);
+    });
+  }
+
+  function getNativeGenerationControlCandidates() {
+    const nodes = Array.from(document.querySelectorAll([
+      "button",
+      "[role='button']",
+      "[role='tooltip']",
+      "[data-radix-popper-content-wrapper]"
+    ].join(",")));
+    const candidates = new Set();
+
+    nodes.forEach((node) => {
+      if (node.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast")) {
+        return;
+      }
+
+      const text = getNodeControlText(node);
+      if (!isGenerationControlText(text)) {
+        return;
+      }
+
+      const tooltipWrapper = node.getAttribute("role") === "tooltip"
+        ? node.closest("[data-radix-popper-content-wrapper]")
+        : null;
+      candidates.add(tooltipWrapper || node);
+    });
+
+    return Array.from(candidates);
+  }
+
+  function getNodeControlText(node) {
+    return [
+      node.getAttribute("aria-label") || "",
+      node.getAttribute("title") || "",
+      node.textContent || ""
+    ].join(" ").toLowerCase();
+  }
+
+  function isGenerationControlText(text) {
+    return /停止|stop/.test(text) && /流式|stream|生成|generat/.test(text);
+  }
+
+  function hideNativeGenerationControl(node) {
+    if (!node || node.classList.contains(HIDDEN_NATIVE_CONTROL_CLASS)) {
+      return;
+    }
+    node.classList.add(HIDDEN_NATIVE_CONTROL_CLASS);
+    node.dataset.cgqaNativeControlHidden = "true";
+  }
+
+  function unhideNativeGenerationControl(node) {
+    if (!node) {
+      return;
+    }
+    node.classList.remove(HIDDEN_NATIVE_CONTROL_CLASS);
+    if (node.dataset.cgqaNativeControlHidden !== undefined) {
+      delete node.dataset.cgqaNativeControlHidden;
+    }
+  }
+
   function getPromptText() {
     const editor = getPromptEditor();
     if (!editor) {
@@ -775,17 +848,20 @@
     if (button) {
       clickElement(button);
       if (await waitForSubmissionStarted(initialUserTurnCount)) {
+        blurActiveElement();
         return;
       }
     }
 
     pressEnterOnPrompt();
     if (await waitForSubmissionStarted(initialUserTurnCount)) {
+      blurActiveElement();
       return;
     }
 
     submitComposerForm();
     if (await waitForSubmissionStarted(initialUserTurnCount)) {
+      blurActiveElement();
       return;
     }
 
@@ -858,6 +934,13 @@
     return false;
   }
 
+  function blurActiveElement() {
+    const active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === "function") {
+      active.blur();
+    }
+  }
+
   globalThis.CGQADom = {
     validateSelection,
     getConversationId,
@@ -877,6 +960,7 @@
     getLastAssistantText,
     syncHiddenMainTurns,
     setMainComposerHidden,
+    setNativeGenerationControlsHidden,
     submitPrompt
   };
 })();

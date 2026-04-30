@@ -211,7 +211,8 @@
   min-height: 34px;
   max-height: 96px;
   flex: 1;
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   color: #111827;
   background: transparent;
   border: 0;
@@ -250,7 +251,13 @@
 
 .cgqa-send-button:disabled {
   cursor: default;
-  opacity: 0.55;
+  color: #98a2b3;
+  background: #eef2f4;
+  opacity: 1;
+}
+
+.cgqa-send-button:disabled:hover {
+  background: #eef2f4;
 }
 
 .cgqa-panel-actions {
@@ -379,4 +386,8 @@
   opacity: 0 !important;
   pointer-events: none !important;
   user-select: none !important;
+}
+
+.cgqa-native-control-hidden {
+  display: none !important;
 }

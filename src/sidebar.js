@@ -5,6 +5,7 @@
   const PANEL_MARGIN = 12;
   const PANEL_DEFAULT_RIGHT = 28;
   const PANEL_DEFAULT_TOP = 140;
+  const INPUT_MAX_HEIGHT = 96;
 
   let panelPosition = readPanelPosition();
 
@@ -159,12 +160,25 @@
     const send = createElement("button", "cgqa-send-button", "↑");
     send.type = "button";
     send.title = "发送";
-    send.disabled = inputDisabled;
-    send.addEventListener("click", () => callbacks.onSend(input.value));
+    send.disabled = true;
+    const submitQuestion = () => {
+      if (!canSubmitInput(input, inputDisabled)) {
+        updateSendState(input, send, inputDisabled);
+        return;
+      }
+      send.disabled = true;
+      input.disabled = true;
+      callbacks.onSend(input.value);
+    };
+    send.addEventListener("click", submitQuestion);
+    input.addEventListener("input", () => {
+      autoResizeInput(input);
+      updateSendState(input, send, inputDisabled);
+    });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        callbacks.onSend(input.value);
+        submitQuestion();
       }
     });
     inputRow.append(input, send);
@@ -181,8 +195,31 @@
 
     panel.append(header, quote, messages, footer);
     appendOverlayRoot(panel);
+    autoResizeInput(input);
+    updateSendState(input, send, inputDisabled);
     messages.scrollTop = messages.scrollHeight;
     return panel;
+  }
+
+  function canSubmitInput(input, inputDisabled) {
+    return Boolean(input && !inputDisabled && !input.disabled && input.value.trim());
+  }
+
+  function updateSendState(input, send, inputDisabled) {
+    if (!send) {
+      return;
+    }
+    send.disabled = !canSubmitInput(input, inputDisabled);
+  }
+
+  function autoResizeInput(input) {
+    if (!input) {
+      return;
+    }
+    input.style.height = "auto";
+    const nextHeight = Math.min(input.scrollHeight, INPUT_MAX_HEIGHT);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > INPUT_MAX_HEIGHT ? "auto" : "hidden";
   }
 
   function bindPanelDrag(panel, handle) {
