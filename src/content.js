@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.4.6-stable-capture-timer";
+  const CONTENT_VERSION = "0.5.0-clean-runtime";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -21,6 +21,7 @@
     observer: null,
     restoreTimer: 0,
     pendingCaptureTimer: 0,
+    pendingStableTimer: 0,
     creatingThread: false,
     loadingConversation: false,
     restoring: false,
@@ -94,7 +95,6 @@
     addEvent(document, "mouseup", handleMouseUp, true);
     addEvent(document, "keydown", handleKeydown, true);
     addEvent(document, "click", handleQuoteMarkClick, true);
-    addEvent(window, "CGQA_DEBUG", logDebugSnapshot);
 
     if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener(handleRuntimeMessage);
@@ -161,7 +161,7 @@
     state.pendingSelection = null;
     state.pendingResponse = null;
     stopPendingCapturePoll();
-    clearTimeout(capturePendingAssistantIfReady.timer);
+    clearPendingStableTimer();
   }
 
   function handleMouseUp(event) {
@@ -453,6 +453,7 @@
     } catch (error) {
       state.pendingResponse = null;
       stopPendingCapturePoll();
+      clearPendingStableTimer();
       assistantMessage.content = error.message || "发送失败。";
       assistantMessage.status = "failed";
       await saveAndRenderThread(thread);
@@ -530,12 +531,9 @@
     return {
       threadId,
       promptToken,
-      baselineCount: baselineRecords.length,
-      knownSignatures: new Set(baselineRecords.map(getAssistantRecordSignature)),
       baselineTextBySignature,
-      candidateSignature: "",
+      candidate: null,
       startedAt: Date.now(),
-      lastText: ""
     };
   }
 
@@ -547,6 +545,8 @@
     const thread = getThread(state.pendingResponse.threadId);
     if (!thread) {
       state.pendingResponse = null;
+      stopPendingCapturePoll();
+      clearPendingStableTimer();
       return;
     }
 
@@ -554,6 +554,9 @@
       return message.role === "assistant" && message.status === "generating";
     });
     if (!generating) {
+      state.pendingResponse = null;
+      stopPendingCapturePoll();
+      clearPendingStableTimer();
       return;
     }
 
@@ -562,38 +565,50 @@
       generating.status = "failed";
       state.pendingResponse = null;
       stopPendingCapturePoll();
+      clearPendingStableTimer();
       saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
         console.error("[CGQA] save timeout state failed", error);
       });
       return;
     }
 
-    const newRecord = findPendingAssistantRecord(thread);
-    if (!newRecord || !newRecord.text) {
+    const candidate = findPendingAssistantCandidate(thread);
+    if (!candidate || !candidate.text) {
       return;
     }
 
-    const signature = getAssistantRecordSignature(newRecord);
-    if (
-      capturePendingAssistantIfReady.timer
-      && state.pendingResponse.candidateSignature === signature
-      && state.pendingResponse.lastText === newRecord.text
-    ) {
+    scheduleStableCandidateCapture(thread, generating, candidate);
+  }
+
+  function scheduleStableCandidateCapture(thread, generating, candidate) {
+    const signature = getAssistantRecordSignature(candidate);
+    const pending = state.pendingResponse;
+    if (!pending) {
       return;
     }
 
-    state.pendingResponse.candidateSignature = signature;
-    state.pendingResponse.lastText = newRecord.text;
-    clearTimeout(capturePendingAssistantIfReady.timer);
-    capturePendingAssistantIfReady.timer = setTimeout(async () => {
-      capturePendingAssistantIfReady.timer = 0;
-      const latest = findAssistantRecordBySignature(signature) || findPendingAssistantRecord(thread);
-      const text = latest ? latest.text : newRecord.text;
+    const sameCandidate = pending.candidate
+      && pending.candidate.signature === signature
+      && pending.candidate.text === candidate.text;
+    if (sameCandidate && state.pendingStableTimer) {
+      return;
+    }
+
+    pending.candidate = { signature, text: candidate.text };
+    clearPendingStableTimer();
+    state.pendingStableTimer = setTimeout(async () => {
+      state.pendingStableTimer = 0;
+      if (!state.pendingResponse || state.pendingResponse.threadId !== thread.threadId) {
+        return;
+      }
+
+      const latest = findAssistantRecordBySignature(signature) || findPendingAssistantCandidate(thread);
+      const text = latest ? latest.text : candidate.text;
       if (!text || text === generating.content || text === thread.quoteText) {
         return;
       }
       generating.content = text;
-      generating.html = latest && latest.html || newRecord.html || "";
+      generating.html = latest && latest.html || candidate.html || "";
       generating.contentFormat = generating.html ? "html" : "text";
       generating.status = "completed";
       state.pendingResponse = null;
@@ -603,39 +618,11 @@
     }, RESPONSE_STABLE_DELAY_MS);
   }
 
-  function findPendingAssistantRecord(thread) {
+  function findPendingAssistantCandidate(thread) {
     const records = CGQADom.getAssistantMessageRecords();
     const tracker = state.pendingResponse;
     if (!tracker) {
       return null;
-    }
-
-    const explicitNewRecord = records.find((record) => {
-      return record.text
-        && !tracker.knownSignatures.has(getAssistantRecordSignature(record))
-        && isUsableAssistantAnswer(record.text, thread);
-    });
-    if (explicitNewRecord) {
-      return explicitNewRecord;
-    }
-
-    if (records.length > tracker.baselineCount) {
-      const appendedRecord = records[records.length - 1];
-      if (appendedRecord && appendedRecord.text && isUsableAssistantAnswer(appendedRecord.text, thread)) {
-        return appendedRecord;
-      }
-    }
-
-    const changedKnownRecord = [...records].reverse().find((record) => {
-      const signature = getAssistantRecordSignature(record);
-      const baselineText = tracker.baselineTextBySignature && tracker.baselineTextBySignature[signature] || "";
-      return tracker.knownSignatures.has(signature)
-        && record.text
-        && record.text !== baselineText
-        && isUsableAssistantAnswer(record.text, thread);
-    });
-    if (changedKnownRecord) {
-      return changedKnownRecord;
     }
 
     const followupRecord = findAssistantRecordAfterPromptToken(thread, records, tracker.promptToken);
@@ -643,7 +630,7 @@
       return followupRecord;
     }
 
-    return null;
+    return findChangedAssistantRecord(thread, records, tracker.baselineTextBySignature);
   }
 
   function startPendingCapturePoll() {
@@ -659,6 +646,25 @@
     }
     clearInterval(state.pendingCaptureTimer);
     state.pendingCaptureTimer = 0;
+  }
+
+  function clearPendingStableTimer() {
+    if (!state.pendingStableTimer) {
+      return;
+    }
+    clearTimeout(state.pendingStableTimer);
+    state.pendingStableTimer = 0;
+  }
+
+  function findChangedAssistantRecord(thread, records, baselineTextBySignature) {
+    return [...records].reverse().find((record) => {
+      if (!record.text || !isUsableAssistantAnswer(record.text, thread)) {
+        return false;
+      }
+
+      const signature = getAssistantRecordSignature(record);
+      return record.text !== (baselineTextBySignature && baselineTextBySignature[signature] || "");
+    }) || null;
   }
 
   function findAssistantRecordAfterPromptToken(thread, assistantRecords, promptToken) {
@@ -705,110 +711,6 @@
     }) || null;
   }
 
-  function logDebugSnapshot() {
-    const snapshot = buildDebugSnapshot();
-    console.group("[CGQA] debug snapshot");
-    console.log(snapshot);
-    console.groupEnd();
-    return snapshot;
-  }
-
-  function buildDebugSnapshot() {
-    const allRecords = CGQADom.getAllTurnRecords();
-    const assistantRecords = CGQADom.getAssistantMessageRecords();
-    const activeThread = getThread(state.activeThreadId);
-    const promptToken = getDebugPromptToken(activeThread);
-    const promptIndex = promptToken ? findLastPromptUserRecordIndex(allRecords, promptToken) : -1;
-    const followingRecords = promptIndex >= 0
-      ? allRecords.slice(promptIndex + 1, promptIndex + 4).map(summarizeTurnRecord)
-      : [];
-
-    return {
-      version: CONTENT_VERSION,
-      url: location.href,
-      conversationId: state.conversationId,
-      activeThreadId: state.activeThreadId,
-      threadCount: state.threads.length,
-      pendingResponse: summarizePendingResponse(),
-      activeThread: summarizeThread(activeThread),
-      promptToken,
-      promptUserRecordIndex: promptIndex,
-      promptUserRecord: promptIndex >= 0 ? summarizeTurnRecord(allRecords[promptIndex]) : null,
-      recordsAfterPrompt: followingRecords,
-      allTurnCount: allRecords.length,
-      assistantRecordCount: assistantRecords.length,
-      allTurnRecords: allRecords.map(summarizeTurnRecord),
-      assistantRecords: assistantRecords.map(summarizeTurnRecord)
-    };
-  }
-
-  function getDebugPromptToken(activeThread) {
-    if (state.pendingResponse && state.pendingResponse.promptToken) {
-      return state.pendingResponse.promptToken;
-    }
-    const items = getMainChatItems(activeThread);
-    return items.length > 0 ? items[items.length - 1].promptToken : "";
-  }
-
-  function summarizePendingResponse() {
-    if (!state.pendingResponse) {
-      return null;
-    }
-    return {
-      threadId: state.pendingResponse.threadId,
-      promptToken: state.pendingResponse.promptToken,
-      baselineCount: state.pendingResponse.baselineCount,
-      knownSignatureCount: state.pendingResponse.knownSignatures ? state.pendingResponse.knownSignatures.size : 0,
-      candidateSignature: state.pendingResponse.candidateSignature,
-      lastTextPreview: previewText(state.pendingResponse.lastText),
-      ageMs: Date.now() - state.pendingResponse.startedAt
-    };
-  }
-
-  function summarizeThread(thread) {
-    if (!thread) {
-      return null;
-    }
-    return {
-      threadId: thread.threadId,
-      displayIndex: thread.displayIndex,
-      quotePreview: previewText(thread.quoteText),
-      messageCount: Array.isArray(thread.messages) ? thread.messages.length : 0,
-      messages: (thread.messages || []).map((message) => ({
-        role: message.role,
-        status: message.status,
-        contentFormat: message.contentFormat || "text",
-        contentPreview: previewText(message.content)
-      })),
-      mainChatItems: getMainChatItems(thread)
-    };
-  }
-
-  function summarizeTurnRecord(record) {
-    if (!record) {
-      return null;
-    }
-    return {
-      index: record.index,
-      role: record.role,
-      turnId: record.turnId,
-      messageId: record.messageId,
-      signature: getAssistantRecordSignature(record),
-      textLength: record.text ? record.text.length : 0,
-      textPreview: previewText(record.text),
-      htmlLength: record.html ? record.html.length : 0,
-      contentFormat: record.contentFormat || "text"
-    };
-  }
-
-  function previewText(text, maxLength = 160) {
-    const normalized = String(text || "").replace(/\s+/g, " ").trim();
-    if (normalized.length <= maxLength) {
-      return normalized;
-    }
-    return `${normalized.slice(0, maxLength)}...`;
-  }
-
   function findAssistantRecordBySignature(signature) {
     return CGQADom.getAssistantMessageRecords().find((record) => {
       return getAssistantRecordSignature(record) === signature;
@@ -843,7 +745,7 @@
     if (state.pendingResponse && state.pendingResponse.threadId === threadId) {
       state.pendingResponse = null;
       stopPendingCapturePoll();
-      clearTimeout(capturePendingAssistantIfReady.timer);
+      clearPendingStableTimer();
     }
     await CGQAStorage.deleteThread(state.conversationId, threadId);
     syncMainChatVisibility();
@@ -869,7 +771,7 @@
 
   function destroy() {
     clearTimeout(state.restoreTimer);
-    clearTimeout(capturePendingAssistantIfReady.timer);
+    clearPendingStableTimer();
     stopPendingCapturePoll();
     if (state.observer) {
       state.observer.disconnect();
@@ -897,8 +799,7 @@
     version: CONTENT_VERSION,
     destroy,
     openThread,
-    togglePanel,
-    debug: logDebugSnapshot
+    togglePanel
   };
   globalThis.CGQAApp = globalThis[RUNTIME_KEY];
   globalThis.CGQAContentVersion = CONTENT_VERSION;

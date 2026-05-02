@@ -1,11 +1,7 @@
 (function () {
   "use strict";
 
-  const STORAGE_PREFIX = "cgqa:v1:";
-
-  function hasChromeStorage() {
-    return Boolean(globalThis.chrome && chrome.storage && chrome.storage.local);
-  }
+  const STORAGE_PREFIX = "cgqa:v2:";
 
   function getStorageKey(conversationId) {
     return `${STORAGE_PREFIX}${conversationId || "unknown"}`;
@@ -13,27 +9,31 @@
 
   function readChrome(key) {
     return new Promise((resolve) => {
-      chrome.storage.local.get([key], (result) => resolve(result[key] || null));
+      chrome.storage.local.get([key], (result) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(result[key] || null);
+      });
     });
   }
 
   function writeChrome(key, value) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({ [key]: value }, resolve);
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ [key]: value }, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        resolve();
+      });
     });
   }
 
   async function readConversation(conversationId) {
     const key = getStorageKey(conversationId);
-    if (hasChromeStorage()) {
-      return (await readChrome(key)) || { threads: [] };
-    }
-
-    try {
-      return JSON.parse(localStorage.getItem(key)) || { threads: [] };
-    } catch (_error) {
-      return { threads: [] };
-    }
+    return (await readChrome(key)) || { threads: [] };
   }
 
   async function writeConversation(conversationId, data) {
@@ -43,12 +43,7 @@
       updatedAt: Date.now()
     };
 
-    if (hasChromeStorage()) {
-      await writeChrome(key, value);
-      return value;
-    }
-
-    localStorage.setItem(key, JSON.stringify(value));
+    await writeChrome(key, value);
     return value;
   }
 
