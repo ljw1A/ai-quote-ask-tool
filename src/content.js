@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.4.5-debug-snapshot";
+  const CONTENT_VERSION = "0.4.6-stable-capture-timer";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -574,10 +574,19 @@
     }
 
     const signature = getAssistantRecordSignature(newRecord);
+    if (
+      capturePendingAssistantIfReady.timer
+      && state.pendingResponse.candidateSignature === signature
+      && state.pendingResponse.lastText === newRecord.text
+    ) {
+      return;
+    }
+
     state.pendingResponse.candidateSignature = signature;
     state.pendingResponse.lastText = newRecord.text;
     clearTimeout(capturePendingAssistantIfReady.timer);
     capturePendingAssistantIfReady.timer = setTimeout(async () => {
+      capturePendingAssistantIfReady.timer = 0;
       const latest = findAssistantRecordBySignature(signature) || findPendingAssistantRecord(thread);
       const text = latest ? latest.text : newRecord.text;
       if (!text || text === generating.content || text === thread.quoteText) {
