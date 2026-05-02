@@ -332,7 +332,10 @@
           return NodeFilter.FILTER_REJECT;
         }
         const parent = node.parentElement;
-        if (!parent || parent.closest(".cgqa-quote-chip")) {
+        if (parent && parent.closest(".cgqa-quote-chip")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (!parent && node.parentNode !== root) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -341,19 +344,32 @@
   }
 
   function getTextOffset(root, targetNode, targetOffset) {
-    const walker = createTextWalker(root);
-    let offset = 0;
-    let node = walker.nextNode();
-
-    while (node) {
-      if (node === targetNode) {
-        return offset + targetOffset;
-      }
-      offset += node.nodeValue.length;
-      node = walker.nextNode();
+    if (!root || !targetNode || !isInMarkdown(root, targetNode)) {
+      return -1;
     }
 
-    return -1;
+    try {
+      const range = document.createRange();
+      range.setStart(root, 0);
+      range.setEnd(targetNode, clampDomOffset(targetNode, targetOffset));
+      return getLinearText(range.cloneContents()).length;
+    } catch (_error) {
+      return -1;
+    }
+  }
+
+  function clampDomOffset(node, offset) {
+    const maxOffset = node.nodeType === Node.TEXT_NODE
+      ? node.nodeValue.length
+      : node.childNodes.length;
+    return clampNumber(offset, 0, maxOffset);
+  }
+
+  function clampNumber(value, min, max) {
+    if (!Number.isFinite(value)) {
+      return min;
+    }
+    return Math.min(Math.max(value, min), max);
   }
 
   function getRangeOffsets(root, range) {

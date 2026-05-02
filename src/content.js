@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.3.2-html-message-snapshot";
+  const CONTENT_VERSION = "0.3.3-selection-boundary-offsets";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
