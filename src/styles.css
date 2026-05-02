@@ -246,8 +246,9 @@
 
 .cgqa-message-html pre {
   overflow: auto;
-  color: #d1e9ff;
-  background: #111827;
+  color: #1f2937;
+  background: #f8fafc;
+  border: 1px solid #e4e7ec;
   border-radius: 10px;
   padding: 12px;
 }
@@ -557,4 +558,89 @@
 
 .cgqa-native-control-hidden {
   display: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cgqa-root {
+    color: #e5e7eb;
+    background: rgba(17, 24, 39, 0.96);
+    border-color: rgba(55, 65, 81, 0.9);
+  }
+
+  .cgqa-panel-title,
+  .cgqa-message-html h1,
+  .cgqa-message-html h2,
+  .cgqa-message-html h3,
+  .cgqa-message-html h4,
+  .cgqa-message-html h5,
+  .cgqa-message-html h6 {
+    color: #f9fafb;
+  }
+
+  .cgqa-panel-subtitle,
+  .cgqa-quote-preview,
+  .cgqa-text-button,
+  .cgqa-message-time {
+    color: #9ca3af;
+  }
+
+  .cgqa-icon-button {
+    color: #d1d5db;
+  }
+
+  .cgqa-icon-button:hover {
+    color: #f9fafb;
+    background: #374151;
+  }
+
+  .cgqa-quote-preview,
+  .cgqa-input-row,
+  .cgqa-message-body {
+    background: #111827;
+    border-color: #374151;
+  }
+
+  .cgqa-message-body {
+    color: #e5e7eb;
+  }
+
+  .cgqa-message-user .cgqa-message-body {
+    background: #0f2f24;
+    border-color: #14532d;
+  }
+
+  .cgqa-message-body.is-generating {
+    color: #d1d5db;
+    background: #1f2937;
+  }
+
+  .cgqa-message-body.is-failed {
+    color: #fecdd3;
+    border-color: #7f1d1d;
+    background: #450a0a;
+  }
+
+  .cgqa-input {
+    color: #f9fafb;
+  }
+
+  .cgqa-message-html code {
+    color: #bfdbfe;
+    background: #1f2937;
+  }
+
+  .cgqa-message-html pre {
+    color: #d1e9ff;
+    background: #111827;
+    border-color: #374151;
+  }
+
+  .cgqa-message-html th,
+  .cgqa-message-html td {
+    border-color: #374151;
+  }
+
+  .cgqa-message-html th {
+    background: #1f2937;
+  }
 }
