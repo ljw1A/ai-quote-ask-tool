@@ -1145,20 +1145,28 @@
     const button = await waitForSendButton({ hasPromptText: Boolean(text && text.trim()) });
     if (button) {
       clickElement(button);
-      if (await waitForSubmissionStarted(initialUserTurnCount)) {
+      if (await waitForSubmissionStarted(initialUserTurnCount, text, 4200)) {
+        blurActiveElement();
+        return;
+      }
+      if (!shouldRetrySubmission(text)) {
         blurActiveElement();
         return;
       }
     }
 
     pressEnterOnPrompt();
-    if (await waitForSubmissionStarted(initialUserTurnCount)) {
+    if (await waitForSubmissionStarted(initialUserTurnCount, text, 2200)) {
+      blurActiveElement();
+      return;
+    }
+    if (!shouldRetrySubmission(text)) {
       blurActiveElement();
       return;
     }
 
     submitComposerForm();
-    if (await waitForSubmissionStarted(initialUserTurnCount)) {
+    if (await waitForSubmissionStarted(initialUserTurnCount, text, 2200)) {
       blurActiveElement();
       return;
     }
@@ -1182,7 +1190,6 @@
     element.dispatchEvent(new PointerEvent("pointerup", { ...eventInit, pointerType: "mouse" }));
     element.dispatchEvent(new MouseEvent("mouseup", eventInit));
     element.dispatchEvent(new MouseEvent("click", eventInit));
-    element.click();
   }
 
   function pressEnterOnPrompt() {
@@ -1221,15 +1228,48 @@
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   }
 
-  async function waitForSubmissionStarted(initialUserTurnCount) {
+  async function waitForSubmissionStarted(initialUserTurnCount, promptText, timeoutMs = 1800) {
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 1800) {
-      if (getUserTurnCount() > initialUserTurnCount || getPromptText().trim() === "") {
+    while (Date.now() - startedAt < timeoutMs) {
+      if (hasSubmissionStarted(initialUserTurnCount, promptText)) {
         return true;
       }
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
     return false;
+  }
+
+  function hasSubmissionStarted(initialUserTurnCount, promptText) {
+    if (getUserTurnCount() > initialUserTurnCount || getPromptText().trim() === "") {
+      return true;
+    }
+
+    const trackingToken = extractTrackingToken(promptText);
+    if (trackingToken && getAllTurnRecords().some((record) => {
+      return record.role === "user" && record.text.includes(trackingToken);
+    })) {
+      return true;
+    }
+
+    return getNativeGenerationControlCandidates().length > 0;
+  }
+
+  function shouldRetrySubmission(promptText) {
+    if (hasSubmissionStarted(getUserTurnCount(), promptText)) {
+      return false;
+    }
+
+    const currentPrompt = getPromptText().trim();
+    if (!currentPrompt || currentPrompt !== String(promptText || "").trim()) {
+      return false;
+    }
+
+    return Boolean(findSendButton({ hasPromptText: true }));
+  }
+
+  function extractTrackingToken(text) {
+    const match = String(text || "").match(/\bCGQA_PROMPT:[\w:-]+/);
+    return match ? match[0] : "";
   }
 
   function blurActiveElement() {

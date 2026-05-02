@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.4.1-polished-question-ui";
+  const CONTENT_VERSION = "0.4.2-submit-without-duplicate-retry";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
