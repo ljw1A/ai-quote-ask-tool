@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.5.1-ignore-thinking-status";
+  const CONTENT_VERSION = "0.5.2-mark-after-first-question";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -207,11 +207,10 @@
         CGQASidebar.showToast("当前选区包含公式或代码结构，将使用保守标记。");
       }
 
+      discardEmptyActiveThread();
       const thread = buildThread(selection);
       registerThread(thread);
       openThread(thread.threadId);
-      persistThread(thread);
-      renderThreadMark(thread, { notify: true });
       clearCurrentSelection();
       state.pendingSelection = null;
     } catch (error) {
@@ -265,13 +264,6 @@
     return state.threads.reduce((max, thread) => {
       return Math.max(max, Number(thread.displayIndex) || 0);
     }, 0) + 1;
-  }
-
-  function persistThread(thread) {
-    CGQAStorage.saveThread(thread).catch((error) => {
-      console.error("[CGQA] save thread failed", error);
-      CGQASidebar.showToast("批注已打开，但本地保存失败。");
-    });
   }
 
   function renderThreadMark(thread, options = {}) {
@@ -334,10 +326,23 @@
   }
 
   function closeSidebar() {
+    discardEmptyActiveThread();
     state.activeThreadId = "";
     CGQADom.setActiveMark("");
     sidebar.render(null);
     syncPageDecorations();
+  }
+
+  function discardEmptyActiveThread() {
+    const threadId = state.activeThreadId;
+    if (!threadId) {
+      return;
+    }
+
+    const thread = getThread(threadId);
+    if (thread && !hasThreadStarted(thread)) {
+      state.threads = state.threads.filter((item) => item.threadId !== threadId);
+    }
   }
 
   function togglePanel() {
@@ -346,7 +351,7 @@
       return;
     }
 
-    const latest = state.threads[state.threads.length - 1];
+    const latest = [...state.threads].reverse().find(hasThreadStarted);
     if (latest) {
       openThread(latest.threadId);
       return;
@@ -384,7 +389,10 @@
   }
 
   function renderSavedThread(thread) {
-    CGQADom.updateMarkChip(thread);
+    if (hasThreadStarted(thread)) {
+      renderThreadMark(thread, { notify: true });
+      CGQADom.updateMarkChip(thread);
+    }
     if (thread.threadId === state.activeThreadId) {
       sidebar.render(thread);
     }
@@ -464,6 +472,12 @@
 
   function hasGeneratingMessage(thread) {
     return (thread.messages || []).some((message) => message.role === "assistant" && message.status === "generating");
+  }
+
+  function hasThreadStarted(thread) {
+    return Boolean(thread && Array.isArray(thread.messages) && thread.messages.some((message) => {
+      return message.role === "user";
+    }));
   }
 
   function createMainChatItem() {
@@ -778,7 +792,7 @@
     state.restoreTimer = setTimeout(() => {
       state.restoring = true;
       CGQADom.clearRenderedMarks();
-      state.threads.forEach((thread) => renderThreadMark(thread));
+      state.threads.filter(hasThreadStarted).forEach((thread) => renderThreadMark(thread));
       if (state.activeThreadId) {
         CGQADom.setActiveMark(state.activeThreadId);
       }
