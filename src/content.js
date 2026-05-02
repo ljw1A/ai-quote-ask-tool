@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.3.0-attach-selection-action";
+  const CONTENT_VERSION = "0.3.1-single-delete-action";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -44,8 +44,7 @@
     sidebar = CGQASidebar.buildSidebar({
       onClose: closeSidebar,
       onSend: sendQuestion,
-      onDeleteThread: deleteActiveThread,
-      onClearConversation: clearConversation
+      onDeleteThread: deleteActiveThread
     });
 
     await loadThreads();
@@ -650,16 +649,6 @@
     syncMainChatVisibility();
     closeSidebar();
     scheduleRestore();
-  }
-
-  async function clearConversation() {
-    await CGQAStorage.clearConversation(state.conversationId);
-    state.threads = [];
-    resetTransientState();
-    syncMainChatVisibility();
-    closeSidebar();
-    CGQADom.clearRenderedMarks();
-    CGQASidebar.showToast("已清除当前会话的批注引用。");
   }
 
   function scheduleRestore() {

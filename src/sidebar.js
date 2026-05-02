@@ -188,12 +188,9 @@
 
     const actions = createElement("div", "cgqa-panel-actions");
     const deleteThread = createElement("button", "cgqa-text-button", "删除引用");
-    const clearConversation = createElement("button", "cgqa-text-button", "清除当前会话");
     deleteThread.type = "button";
-    clearConversation.type = "button";
     deleteThread.addEventListener("click", () => callbacks.onDeleteThread());
-    clearConversation.addEventListener("click", () => callbacks.onClearConversation());
-    actions.append(deleteThread, clearConversation);
+    actions.append(deleteThread);
     footer.append(inputRow, actions);
 
     panel.append(header, quote, messages, footer);
