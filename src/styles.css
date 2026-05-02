@@ -480,37 +480,49 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.cgqa-selection-button-group {
+  align-items: stretch !important;
+}
+
 .cgqa-selection-attached-button {
   --cgqa-green: #10b981;
   --cgqa-green-strong: #059669;
+  all: unset;
+  box-sizing: border-box;
   display: inline-flex;
-  min-height: 42px;
+  height: var(--cgqa-selection-toolbar-height, 40px);
+  min-height: 0;
+  min-width: 78px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
   margin-left: 0;
   color: var(--cgqa-green-strong);
   background: rgba(255, 255, 255, 0.94);
   border: 0;
-  border-left: 1px solid rgba(16, 185, 129, 0.16);
+  border-left: 1px solid rgba(15, 23, 42, 0.07);
   border-radius: 0;
-  padding: 0 15px;
+  padding: 0 13px;
   font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
   box-shadow: none;
+  cursor: pointer;
   transition: color 150ms ease, background-color 150ms ease;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .cgqa-selection-attached-button:hover {
   color: #047857;
-  background: rgba(16, 185, 129, 0.08);
+  background: rgba(16, 185, 129, 0.075);
 }
 
 .cgqa-selection-icon {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.1;
 }
 
 .cgqa-selection-label {
