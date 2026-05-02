@@ -515,13 +515,13 @@
 }
 
 .cgqa-selection-attached-button:hover {
-  color: #111827;
-  background: rgba(15, 23, 42, 0.075);
+  color: var(--cgqa-green-strong);
+  background: #e5e7eb;
 }
 
 .cgqa-selection-attached-button:active {
-  color: #111827;
-  background: rgba(15, 23, 42, 0.11);
+  color: var(--cgqa-green-strong);
+  background: #d1d5db;
 }
 
 .cgqa-selection-icon {
