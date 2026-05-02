@@ -464,12 +464,16 @@
     return range;
   }
 
-  function createMarkElement(thread, blockMode) {
+  function createMarkElement(thread, blockMode, includeChip = true) {
     const mark = document.createElement(blockMode ? "div" : "span");
     mark.className = blockMode ? "cgqa-quote-mark cgqa-quote-mark-block" : "cgqa-quote-mark";
     mark.dataset.quoteId = thread.quoteId;
     mark.dataset.threadId = thread.threadId;
     mark.dataset.displayIndex = String(thread.displayIndex || "");
+
+    if (!includeChip) {
+      return mark;
+    }
 
     const chip = document.createElement("button");
     chip.type = "button";
@@ -523,17 +527,63 @@
     });
   }
 
-  function wrapRange(range, thread) {
-    const mark = createMarkElement(thread, false);
-    try {
-      const content = range.extractContents();
-      mark.insertBefore(content, mark.firstChild);
-      range.insertNode(mark);
-      return true;
-    } catch (_error) {
-      mark.remove();
+  function wrapRange(markdown, range, thread) {
+    const offsets = getRangeOffsets(markdown, range);
+    const slices = offsets.startOffset >= 0 && offsets.endOffset > offsets.startOffset
+      ? getTextSlicesByOffsets(markdown, offsets.startOffset, offsets.endOffset)
+      : [];
+
+    if (slices.length === 0) {
       return false;
     }
+
+    try {
+      for (let index = slices.length - 1; index >= 0; index -= 1) {
+        wrapTextSlice(slices[index], thread, index === slices.length - 1);
+      }
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function getTextSlicesByOffsets(root, startOffset, endOffset) {
+    const slices = [];
+    const walker = createTextWalker(root);
+    let currentOffset = 0;
+    let node = walker.nextNode();
+
+    while (node) {
+      const nextOffset = currentOffset + node.nodeValue.length;
+      if (nextOffset > startOffset && currentOffset < endOffset) {
+        const start = Math.max(0, startOffset - currentOffset);
+        const end = Math.min(node.nodeValue.length, endOffset - currentOffset);
+        if (end > start) {
+          slices.push({ node, start, end });
+        }
+      }
+      if (nextOffset >= endOffset) {
+        break;
+      }
+      currentOffset = nextOffset;
+      node = walker.nextNode();
+    }
+
+    return slices;
+  }
+
+  function wrapTextSlice(slice, thread, includeChip) {
+    let selectedNode = slice.node;
+    if (slice.end < selectedNode.nodeValue.length) {
+      selectedNode.splitText(slice.end);
+    }
+    if (slice.start > 0) {
+      selectedNode = selectedNode.splitText(slice.start);
+    }
+
+    const mark = createMarkElement(thread, false, includeChip);
+    selectedNode.parentNode.insertBefore(mark, selectedNode);
+    mark.insertBefore(selectedNode, mark.firstChild);
   }
 
   function markBlock(markdown, range, thread) {
@@ -578,7 +628,7 @@
       return markBlock(markdown, range, thread);
     }
 
-    return wrapRange(range, thread);
+    return wrapRange(markdown, range, thread);
   }
 
   function findTurnForThread(thread) {
