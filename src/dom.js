@@ -764,13 +764,16 @@
     return getAllTurns().map((turn, index) => {
       const role = getTurnRole(turn);
       const message = getMessageNodeByRole(turn, role);
+      const markdown = role === "assistant" ? getMarkdownNode(turn) : null;
       return {
         index,
         turn,
         role,
         turnId: getTurnId(turn),
         messageId: message ? message.getAttribute("data-message-id") || "" : "",
-        text: getTurnText(turn)
+        text: getTurnText(turn),
+        html: markdown ? getSanitizedHtml(markdown) : "",
+        contentFormat: markdown ? "html" : "text"
       };
     }).filter((record) => record.role && record.turn);
   }

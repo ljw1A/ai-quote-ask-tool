@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.4.3-capture-reused-assistant-turn";
+  const CONTENT_VERSION = "0.4.4-capture-answer-after-token";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -20,6 +20,7 @@
     pendingResponse: null,
     observer: null,
     restoreTimer: 0,
+    pendingCaptureTimer: 0,
     creatingThread: false,
     loadingConversation: false,
     restoring: false,
@@ -158,6 +159,7 @@
   function resetTransientState() {
     state.pendingSelection = null;
     state.pendingResponse = null;
+    stopPendingCapturePoll();
     clearTimeout(capturePendingAssistantIfReady.timer);
   }
 
@@ -442,12 +444,14 @@
     syncPageDecorations();
 
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
+    startPendingCapturePoll();
 
     try {
       await CGQADom.submitPrompt(buildPrompt(thread, question, mainChatItem.promptToken));
       syncPageDecorations();
     } catch (error) {
       state.pendingResponse = null;
+      stopPendingCapturePoll();
       assistantMessage.content = error.message || "发送失败。";
       assistantMessage.status = "failed";
       await saveAndRenderThread(thread);
@@ -556,6 +560,7 @@
       generating.content = generating.content === "生成中..." ? "回答等待超时，请在主聊天中查看结果。" : generating.content;
       generating.status = "failed";
       state.pendingResponse = null;
+      stopPendingCapturePoll();
       saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
         console.error("[CGQA] save timeout state failed", error);
       });
@@ -582,6 +587,7 @@
       generating.contentFormat = generating.html ? "html" : "text";
       generating.status = "completed";
       state.pendingResponse = null;
+      stopPendingCapturePoll();
       await saveAndRenderThread(thread);
       syncPageDecorations();
     }, RESPONSE_STABLE_DELAY_MS);
@@ -622,7 +628,71 @@
       return changedKnownRecord;
     }
 
+    const followupRecord = findAssistantRecordAfterPromptToken(thread, records, tracker.promptToken);
+    if (followupRecord) {
+      return followupRecord;
+    }
+
     return null;
+  }
+
+  function startPendingCapturePoll() {
+    stopPendingCapturePoll();
+    state.pendingCaptureTimer = setInterval(() => {
+      capturePendingAssistantIfReady();
+    }, 1000);
+  }
+
+  function stopPendingCapturePoll() {
+    if (!state.pendingCaptureTimer) {
+      return;
+    }
+    clearInterval(state.pendingCaptureTimer);
+    state.pendingCaptureTimer = 0;
+  }
+
+  function findAssistantRecordAfterPromptToken(thread, assistantRecords, promptToken) {
+    if (!promptToken) {
+      return null;
+    }
+
+    const records = CGQADom.getAllTurnRecords();
+    const promptIndex = findLastPromptUserRecordIndex(records, promptToken);
+    if (promptIndex < 0) {
+      return null;
+    }
+
+    for (let index = promptIndex + 1; index < records.length; index += 1) {
+      const record = records[index];
+      if (record.role === "user") {
+        return null;
+      }
+      if (record.role !== "assistant" || !isUsableAssistantAnswer(record.text, thread)) {
+        continue;
+      }
+      return findMatchingAssistantRecord(record, assistantRecords) || record;
+    }
+
+    return null;
+  }
+
+  function findLastPromptUserRecordIndex(records, promptToken) {
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      const record = records[index];
+      if (record.role === "user" && record.text && record.text.includes(promptToken)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function findMatchingAssistantRecord(targetRecord, assistantRecords) {
+    const targetSignature = getAssistantRecordSignature(targetRecord);
+    return assistantRecords.find((record) => {
+      return getAssistantRecordSignature(record) === targetSignature;
+    }) || assistantRecords.find((record) => {
+      return record.turn === targetRecord.turn || record.messageId && record.messageId === targetRecord.messageId;
+    }) || null;
   }
 
   function findAssistantRecordBySignature(signature) {
@@ -658,6 +728,7 @@
     state.threads = state.threads.filter((thread) => thread.threadId !== threadId);
     if (state.pendingResponse && state.pendingResponse.threadId === threadId) {
       state.pendingResponse = null;
+      stopPendingCapturePoll();
       clearTimeout(capturePendingAssistantIfReady.timer);
     }
     await CGQAStorage.deleteThread(state.conversationId, threadId);
@@ -685,6 +756,7 @@
   function destroy() {
     clearTimeout(state.restoreTimer);
     clearTimeout(capturePendingAssistantIfReady.timer);
+    stopPendingCapturePoll();
     if (state.observer) {
       state.observer.disconnect();
       state.observer = null;
