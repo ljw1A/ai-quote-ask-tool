@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.5.0-clean-runtime";
+  const CONTENT_VERSION = "0.5.1-ignore-thinking-status";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -729,10 +729,30 @@
 
   function isUsableAssistantAnswer(text, thread) {
     const normalized = (text || "").trim();
-    if (!normalized || normalized === "生成中..." || normalized === thread.quoteText) {
+    if (
+      !normalized
+      || normalized === "生成中..."
+      || normalized === thread.quoteText
+      || isTransientAssistantStatusText(normalized)
+    ) {
       return false;
     }
     return true;
+  }
+
+  function isTransientAssistantStatusText(text) {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    const compact = normalized.replace(/\s+/g, "").toLowerCase();
+    if (normalized.length > 80) {
+      return false;
+    }
+
+    return /^正在思考[.。…]*$/.test(compact)
+      || /^思考中[.。…]*$/.test(compact)
+      || /^已思考\d*(秒|s)?$/.test(compact)
+      || /^thoughtfor(acoupleof)?\d*(second|seconds|s)?$/.test(compact)
+      || /^thinking[.。…]*$/.test(compact)
+      || /^reasoning[.。…]*$/.test(compact);
   }
 
   async function deleteActiveThread() {

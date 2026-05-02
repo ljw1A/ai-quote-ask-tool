@@ -176,14 +176,13 @@
 
   function getReadableText(root) {
     const clone = root.cloneNode(true);
-    clone.querySelectorAll(`${MARK_SELECTOR} .cgqa-quote-chip`).forEach((node) => node.remove());
-    clone.querySelectorAll(".katex").forEach((node) => {
-      const annotation = node.querySelector("annotation[encoding='application/x-tex']");
-      if (annotation) {
-        node.textContent = annotation.textContent || node.textContent || "";
-      }
-    });
+    prepareReadableClone(clone);
     return normalizeText(clone.innerText || clone.textContent || "");
+  }
+
+  function prepareReadableClone(root) {
+    removeNonContentNodes(root);
+    normalizeKatexNodes(root, { keepFallbackText: true });
   }
 
   function getSanitizedHtml(root) {
@@ -201,6 +200,12 @@
   }
 
   function prepareSnapshotClone(root) {
+    removeNonContentNodes(root);
+    root.querySelectorAll(MARK_SELECTOR).forEach((node) => unwrapElement(node));
+    normalizeKatexNodes(root, { keepFallbackText: false });
+  }
+
+  function removeNonContentNodes(root) {
     root.querySelectorAll([
       ".cgqa-quote-chip",
       "button",
@@ -217,12 +222,13 @@
       "[data-testid*='feedback']",
       "[data-testid*='share']"
     ].join(",")).forEach((node) => node.remove());
-    root.querySelectorAll(MARK_SELECTOR).forEach((node) => unwrapElement(node));
+  }
 
+  function normalizeKatexNodes(root, options = {}) {
     root.querySelectorAll(".katex").forEach((node) => {
       const annotation = node.querySelector("annotation[encoding='application/x-tex']");
       if (annotation) {
-        node.textContent = annotation.textContent || "";
+        node.textContent = annotation.textContent || (options.keepFallbackText ? node.textContent || "" : "");
       }
     });
   }
