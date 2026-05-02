@@ -529,6 +529,8 @@ type QuoteThread = {
 type QuoteThreadMessage = {
   role: "user" | "assistant"
   content: string
+  html?: string
+  contentFormat?: "text" | "html"
   createdAt: number
   status?: "generating" | "completed" | "interrupted" | "failed"
 }

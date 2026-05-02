@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.3.1-single-delete-action";
+  const CONTENT_VERSION = "0.3.2-html-message-snapshot";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -439,7 +439,8 @@
       role: "assistant",
       content: "生成中...",
       createdAt: Date.now(),
-      status: "generating"
+      status: "generating",
+      contentFormat: "text"
     };
     thread.messages.push(userMessage, assistantMessage);
     await saveAndRenderThread(thread);
@@ -577,6 +578,8 @@
         return;
       }
       generating.content = text;
+      generating.html = latest && latest.html || newRecord.html || "";
+      generating.contentFormat = generating.html ? "html" : "text";
       generating.status = "completed";
       state.pendingResponse = null;
       await saveAndRenderThread(thread);

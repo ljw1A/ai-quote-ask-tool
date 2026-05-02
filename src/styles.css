@@ -167,6 +167,133 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
+.cgqa-message-body.is-html {
+  white-space: normal;
+}
+
+.cgqa-message-html {
+  display: flow-root;
+  min-width: 0;
+}
+
+.cgqa-message-html > :first-child {
+  margin-top: 0;
+}
+
+.cgqa-message-html > :last-child {
+  margin-bottom: 0;
+}
+
+.cgqa-message-html p,
+.cgqa-message-html ul,
+.cgqa-message-html ol,
+.cgqa-message-html blockquote,
+.cgqa-message-html pre,
+.cgqa-message-html table {
+  margin: 0 0 12px;
+}
+
+.cgqa-message-html h1,
+.cgqa-message-html h2,
+.cgqa-message-html h3,
+.cgqa-message-html h4,
+.cgqa-message-html h5,
+.cgqa-message-html h6 {
+  margin: 14px 0 8px;
+  color: #101828;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.cgqa-message-html h1 {
+  font-size: 18px;
+}
+
+.cgqa-message-html h2 {
+  font-size: 16px;
+}
+
+.cgqa-message-html h3,
+.cgqa-message-html h4,
+.cgqa-message-html h5,
+.cgqa-message-html h6 {
+  font-size: 14px;
+}
+
+.cgqa-message-html ul,
+.cgqa-message-html ol {
+  padding-left: 20px;
+}
+
+.cgqa-message-html li {
+  margin: 4px 0;
+}
+
+.cgqa-message-html blockquote {
+  color: #566272;
+  border-left: 3px solid #d0d5dd;
+  padding-left: 12px;
+}
+
+.cgqa-message-html code {
+  color: #175cd3;
+  background: #f2f4f7;
+  border-radius: 5px;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.cgqa-message-html pre {
+  overflow: auto;
+  color: #d1e9ff;
+  background: #111827;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.cgqa-message-html pre code {
+  display: block;
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  white-space: pre;
+}
+
+.cgqa-message-html table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cgqa-message-html th,
+.cgqa-message-html td {
+  border: 1px solid #e4e7ec;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.cgqa-message-html th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.cgqa-message-html a {
+  color: #087443;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cgqa-message-html hr {
+  border: 0;
+  border-top: 1px solid #e4e7ec;
+  margin: 14px 0;
+}
+
 .cgqa-message-user .cgqa-message-body {
   background: linear-gradient(135deg, #f8fcf9, #f0f8f4);
   border-color: transparent;

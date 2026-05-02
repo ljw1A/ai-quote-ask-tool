@@ -353,7 +353,7 @@
     const content = createElement("div", "cgqa-message-content");
     const labelRow = createElement("div", "cgqa-message-label-row");
     const meta = createElement("div", "cgqa-message-meta", message.role === "user" ? "你" : "ChatGPT");
-    const body = createElement("div", "cgqa-message-body", message.content || "");
+    const body = createElement("div", "cgqa-message-body");
     const createdAt = getValidDate(message.createdAt);
     const time = createElement("time", "cgqa-message-time", formatMessageTime(createdAt));
     if (createdAt) {
@@ -365,11 +365,40 @@
     if (message.status === "failed") {
       body.classList.add("is-failed");
     }
+    renderMessageBody(body, message);
     labelRow.append(meta);
     body.append(time);
     content.append(labelRow, body);
     item.append(content);
     return item;
+  }
+
+  function renderMessageBody(body, message) {
+    const html = getRenderableMessageHtml(message);
+    if (html) {
+      const htmlBody = createElement("div", "cgqa-message-html");
+      htmlBody.innerHTML = html;
+      body.classList.add("is-html");
+      body.append(htmlBody);
+      return;
+    }
+
+    body.append(document.createTextNode(message.content || ""));
+  }
+
+  function getRenderableMessageHtml(message) {
+    if (
+      !message
+      || message.role !== "assistant"
+      || message.status !== "completed"
+      || message.contentFormat !== "html"
+      || !message.html
+      || !globalThis.CGQADom
+      || typeof CGQADom.sanitizeMessageHtml !== "function"
+    ) {
+      return "";
+    }
+    return CGQADom.sanitizeMessageHtml(message.html);
   }
 
   function getValidDate(timestamp) {

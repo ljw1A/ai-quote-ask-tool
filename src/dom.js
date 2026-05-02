@@ -19,6 +19,38 @@
     "[data-testid^='conversation-turn-'][data-turn]",
     "[data-message-author-role]"
   ].join(",");
+  const SNAPSHOT_ALLOWED_TAGS = new Set([
+    "a",
+    "b",
+    "blockquote",
+    "br",
+    "code",
+    "div",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "s",
+    "span",
+    "strong",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul"
+  ]);
 
   function getConversationId() {
     const match = location.pathname.match(/\/c\/([^/?#]+)/);
@@ -152,6 +184,145 @@
       }
     });
     return normalizeText(clone.innerText || clone.textContent || "");
+  }
+
+  function getSanitizedHtml(root) {
+    if (!root) {
+      return "";
+    }
+
+    const clone = root.cloneNode(true);
+    prepareSnapshotClone(clone);
+    return sanitizeMessageHtml(Array.from(clone.childNodes).map((node) => {
+      const container = document.createElement("div");
+      appendSanitizedNode(container, node);
+      return container.innerHTML;
+    }).join(""));
+  }
+
+  function prepareSnapshotClone(root) {
+    root.querySelectorAll([
+      ".cgqa-quote-chip",
+      "button",
+      "svg",
+      "script",
+      "style",
+      "textarea",
+      "input",
+      "select",
+      "[role='button']",
+      "[aria-label='回复操作']",
+      "[aria-label='你的消息操作']",
+      "[data-testid*='copy']",
+      "[data-testid*='feedback']",
+      "[data-testid*='share']"
+    ].join(",")).forEach((node) => node.remove());
+    root.querySelectorAll(MARK_SELECTOR).forEach((node) => unwrapElement(node));
+
+    root.querySelectorAll(".katex").forEach((node) => {
+      const annotation = node.querySelector("annotation[encoding='application/x-tex']");
+      if (annotation) {
+        node.textContent = annotation.textContent || "";
+      }
+    });
+  }
+
+  function unwrapElement(element) {
+    const parent = element.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (element.firstChild) {
+      parent.insertBefore(element.firstChild, element);
+    }
+    element.remove();
+  }
+
+  function sanitizeMessageHtml(html) {
+    if (!html) {
+      return "";
+    }
+
+    const template = document.createElement("template");
+    template.innerHTML = String(html);
+    const container = document.createElement("div");
+    Array.from(template.content.childNodes).forEach((node) => appendSanitizedNode(container, node));
+    return container.innerHTML.trim();
+  }
+
+  function appendSanitizedNode(parent, sourceNode) {
+    const sanitized = sanitizeSnapshotNode(sourceNode);
+    if (sanitized) {
+      parent.append(sanitized);
+    }
+  }
+
+  function sanitizeSnapshotNode(sourceNode) {
+    if (sourceNode.nodeType === Node.TEXT_NODE) {
+      return document.createTextNode(sourceNode.nodeValue || "");
+    }
+    if (sourceNode.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+
+    const tagName = sourceNode.tagName.toLowerCase();
+    if (!SNAPSHOT_ALLOWED_TAGS.has(tagName)) {
+      const fragment = document.createDocumentFragment();
+      Array.from(sourceNode.childNodes).forEach((child) => appendSanitizedNode(fragment, child));
+      return fragment;
+    }
+
+    const element = document.createElement(tagName);
+    copySafeSnapshotAttributes(sourceNode, element, tagName);
+    Array.from(sourceNode.childNodes).forEach((child) => appendSanitizedNode(element, child));
+    return element;
+  }
+
+  function copySafeSnapshotAttributes(sourceNode, targetNode, tagName) {
+    if (tagName === "a") {
+      const href = sourceNode.getAttribute("href") || "";
+      if (isSafeLinkHref(href)) {
+        targetNode.setAttribute("href", href);
+        targetNode.setAttribute("target", "_blank");
+        targetNode.setAttribute("rel", "noopener noreferrer");
+      }
+      const title = sourceNode.getAttribute("title");
+      if (title) {
+        targetNode.setAttribute("title", title);
+      }
+    }
+
+    if (tagName === "code") {
+      const className = getSafeCodeClass(sourceNode.getAttribute("class") || "");
+      if (className) {
+        targetNode.setAttribute("class", className);
+      }
+    }
+
+    if (tagName === "td" || tagName === "th") {
+      copyPositiveIntegerAttribute(sourceNode, targetNode, "colspan");
+      copyPositiveIntegerAttribute(sourceNode, targetNode, "rowspan");
+    }
+
+    if (tagName === "ol") {
+      copyPositiveIntegerAttribute(sourceNode, targetNode, "start");
+    }
+  }
+
+  function isSafeLinkHref(href) {
+    return /^(https?:|mailto:)/i.test(href);
+  }
+
+  function getSafeCodeClass(className) {
+    const safeClasses = className.split(/\s+/).filter((name) => /^language-[\w-]+$/.test(name));
+    return safeClasses.join(" ");
+  }
+
+  function copyPositiveIntegerAttribute(sourceNode, targetNode, attributeName) {
+    const value = sourceNode.getAttribute(attributeName);
+    if (/^[1-9]\d{0,2}$/.test(value || "")) {
+      targetNode.setAttribute(attributeName, value);
+    }
   }
 
   function createTextWalker(root) {
@@ -499,12 +670,16 @@
     return getAssistantTurns().map((turn, index) => {
       const message = getMessageNode(turn);
       const markdown = getMarkdownNode(turn);
+      const text = markdown ? getReadableText(markdown).trim() : "";
+      const html = markdown ? getSanitizedHtml(markdown) : "";
       return {
         index,
         turn,
         turnId: getTurnId(turn),
         messageId: message ? message.getAttribute("data-message-id") || "" : "",
-        text: markdown ? getReadableText(markdown).trim() : ""
+        text,
+        html,
+        contentFormat: html ? "html" : "text"
       };
     }).filter((record) => record.messageId || record.text);
   }
@@ -947,6 +1122,7 @@
     getTurnId,
     getMessageId,
     getReadableText,
+    sanitizeMessageHtml,
     getLinearText,
     getMarkdownNode,
     renderThreadMark,
