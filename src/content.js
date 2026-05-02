@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.4.4-capture-answer-after-token";
+  const CONTENT_VERSION = "0.4.5-debug-snapshot";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -94,6 +94,7 @@
     addEvent(document, "mouseup", handleMouseUp, true);
     addEvent(document, "keydown", handleKeydown, true);
     addEvent(document, "click", handleQuoteMarkClick, true);
+    addEvent(window, "CGQA_DEBUG", logDebugSnapshot);
 
     if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener(handleRuntimeMessage);
@@ -695,6 +696,110 @@
     }) || null;
   }
 
+  function logDebugSnapshot() {
+    const snapshot = buildDebugSnapshot();
+    console.group("[CGQA] debug snapshot");
+    console.log(snapshot);
+    console.groupEnd();
+    return snapshot;
+  }
+
+  function buildDebugSnapshot() {
+    const allRecords = CGQADom.getAllTurnRecords();
+    const assistantRecords = CGQADom.getAssistantMessageRecords();
+    const activeThread = getThread(state.activeThreadId);
+    const promptToken = getDebugPromptToken(activeThread);
+    const promptIndex = promptToken ? findLastPromptUserRecordIndex(allRecords, promptToken) : -1;
+    const followingRecords = promptIndex >= 0
+      ? allRecords.slice(promptIndex + 1, promptIndex + 4).map(summarizeTurnRecord)
+      : [];
+
+    return {
+      version: CONTENT_VERSION,
+      url: location.href,
+      conversationId: state.conversationId,
+      activeThreadId: state.activeThreadId,
+      threadCount: state.threads.length,
+      pendingResponse: summarizePendingResponse(),
+      activeThread: summarizeThread(activeThread),
+      promptToken,
+      promptUserRecordIndex: promptIndex,
+      promptUserRecord: promptIndex >= 0 ? summarizeTurnRecord(allRecords[promptIndex]) : null,
+      recordsAfterPrompt: followingRecords,
+      allTurnCount: allRecords.length,
+      assistantRecordCount: assistantRecords.length,
+      allTurnRecords: allRecords.map(summarizeTurnRecord),
+      assistantRecords: assistantRecords.map(summarizeTurnRecord)
+    };
+  }
+
+  function getDebugPromptToken(activeThread) {
+    if (state.pendingResponse && state.pendingResponse.promptToken) {
+      return state.pendingResponse.promptToken;
+    }
+    const items = getMainChatItems(activeThread);
+    return items.length > 0 ? items[items.length - 1].promptToken : "";
+  }
+
+  function summarizePendingResponse() {
+    if (!state.pendingResponse) {
+      return null;
+    }
+    return {
+      threadId: state.pendingResponse.threadId,
+      promptToken: state.pendingResponse.promptToken,
+      baselineCount: state.pendingResponse.baselineCount,
+      knownSignatureCount: state.pendingResponse.knownSignatures ? state.pendingResponse.knownSignatures.size : 0,
+      candidateSignature: state.pendingResponse.candidateSignature,
+      lastTextPreview: previewText(state.pendingResponse.lastText),
+      ageMs: Date.now() - state.pendingResponse.startedAt
+    };
+  }
+
+  function summarizeThread(thread) {
+    if (!thread) {
+      return null;
+    }
+    return {
+      threadId: thread.threadId,
+      displayIndex: thread.displayIndex,
+      quotePreview: previewText(thread.quoteText),
+      messageCount: Array.isArray(thread.messages) ? thread.messages.length : 0,
+      messages: (thread.messages || []).map((message) => ({
+        role: message.role,
+        status: message.status,
+        contentFormat: message.contentFormat || "text",
+        contentPreview: previewText(message.content)
+      })),
+      mainChatItems: getMainChatItems(thread)
+    };
+  }
+
+  function summarizeTurnRecord(record) {
+    if (!record) {
+      return null;
+    }
+    return {
+      index: record.index,
+      role: record.role,
+      turnId: record.turnId,
+      messageId: record.messageId,
+      signature: getAssistantRecordSignature(record),
+      textLength: record.text ? record.text.length : 0,
+      textPreview: previewText(record.text),
+      htmlLength: record.html ? record.html.length : 0,
+      contentFormat: record.contentFormat || "text"
+    };
+  }
+
+  function previewText(text, maxLength = 160) {
+    const normalized = String(text || "").replace(/\s+/g, " ").trim();
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+    return `${normalized.slice(0, maxLength)}...`;
+  }
+
   function findAssistantRecordBySignature(signature) {
     return CGQADom.getAssistantMessageRecords().find((record) => {
       return getAssistantRecordSignature(record) === signature;
@@ -783,7 +888,8 @@
     version: CONTENT_VERSION,
     destroy,
     openThread,
-    togglePanel
+    togglePanel,
+    debug: logDebugSnapshot
   };
   globalThis.CGQAApp = globalThis[RUNTIME_KEY];
   globalThis.CGQAContentVersion = CONTENT_VERSION;
