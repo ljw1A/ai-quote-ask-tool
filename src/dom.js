@@ -585,17 +585,11 @@
     parent.normalize();
   }
 
-  function clearRenderedMarks(options = {}) {
+  function clearRenderedMarks() {
     document.querySelectorAll(CHIP_SELECTOR).forEach((chip) => {
-      if (options.keepDraft && chip.dataset.draft === "true") {
-        return;
-      }
       chip.remove();
     });
     document.querySelectorAll(MARK_SELECTOR).forEach((mark) => {
-      if (options.keepDraft && mark.dataset.draft === "true") {
-        return;
-      }
       unwrapMark(mark);
     });
   }
@@ -1371,10 +1365,7 @@
     getConversationId,
     getTurnId,
     getMessageId,
-    getReadableText,
     sanitizeMessageHtml,
-    getLinearText,
-    getMarkdownNode,
     renderThreadMark,
     renderDraftThreadMark,
     clearRenderedMarks,
@@ -1382,9 +1373,7 @@
     promoteThreadMark,
     setActiveMark,
     updateMarkChip,
-    getAllTurns,
     getAllTurnRecords,
-    getAssistantTurns,
     getAssistantMessageRecords,
     syncHiddenMainTurns,
     setMainComposerHidden,

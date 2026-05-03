@@ -13,12 +13,12 @@
   --cgqa-border: #dfe7e3;
   --cgqa-panel-bg: rgba(255, 255, 255, 0.97);
   position: fixed;
-  top: 160px;
+  top: 140px;
   right: 28px;
   z-index: 2147483647;
   display: none;
-  width: min(360px, calc(100vw - 32px));
-  max-height: min(620px, calc(100vh - 72px));
+  width: min(408px, calc(100vw - 24px));
+  max-height: min(632px, calc(100vh - 48px));
   overflow: hidden;
   flex-direction: column;
   color: #1f2933;
