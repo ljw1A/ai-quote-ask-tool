@@ -11,6 +11,7 @@
   - `src/dom.js` owns ChatGPT DOM queries, selection validation, quote anchoring, mark rendering, main composer operations, and assistant message extraction.
   - `src/sidebar.js` owns plugin UI rendering and panel interactions.
   - `src/storage.js` owns persisted thread data shape and migration/reset policy.
+  - `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies. Do not duplicate sanitizer allowlists in page-specific modules.
   - `src/styles.css` owns visual states only; do not encode behavior in CSS class hacks without a JS state owner.
   - `popup.html` / `src/popup.js` own the extension action menu.
   - `manager.html` / `src/manager.js` own the standalone management page.

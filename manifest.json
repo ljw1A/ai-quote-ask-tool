@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Quote Annotation",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Add lightweight quote annotation threads to ChatGPT conversations.",
   "permissions": ["storage"],
   "action": {
@@ -13,6 +13,7 @@
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
       "js": [
         "src/storage.js",
+        "src/sanitize.js",
         "src/dom.js",
         "src/sidebar.js",
         "src/content.js"

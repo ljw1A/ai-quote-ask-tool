@@ -173,7 +173,16 @@
   }
 
   function createMessageBody(message) {
-    const body = createElement("div", "message-body", message.content || "");
+    const body = createElement("div", "message-body");
+    const html = getRenderableMessageHtml(message);
+    if (html) {
+      const htmlBody = createElement("div", "message-html");
+      htmlBody.innerHTML = html;
+      body.classList.add("is-html");
+      body.append(htmlBody);
+    } else {
+      body.append(document.createTextNode(message.content || ""));
+    }
     const time = createElement("time", "message-time", formatClock(message.createdAt));
     const date = getValidDate(message.createdAt);
     if (date) {
@@ -181,6 +190,21 @@
     }
     body.append(time);
     return body;
+  }
+
+  function getRenderableMessageHtml(message) {
+    if (
+      !message
+      || message.role !== "assistant"
+      || message.status !== "completed"
+      || message.contentFormat !== "html"
+      || !message.html
+      || !globalThis.CGQASanitize
+      || typeof CGQASanitize.sanitizeMessageHtml !== "function"
+    ) {
+      return "";
+    }
+    return CGQASanitize.sanitizeMessageHtml(message.html);
   }
 
   function createElement(tag, className, text) {

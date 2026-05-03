@@ -412,12 +412,12 @@
       || message.status !== "completed"
       || message.contentFormat !== "html"
       || !message.html
-      || !globalThis.CGQADom
-      || typeof CGQADom.sanitizeMessageHtml !== "function"
+      || !globalThis.CGQASanitize
+      || typeof CGQASanitize.sanitizeMessageHtml !== "function"
     ) {
       return "";
     }
-    return CGQADom.sanitizeMessageHtml(message.html);
+    return CGQASanitize.sanitizeMessageHtml(message.html);
   }
 
   function getValidDate(timestamp) {

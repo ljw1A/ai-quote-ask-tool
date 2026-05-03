@@ -32,6 +32,7 @@ The extension is split into these responsibilities:
 - `src/dom.js` is the ChatGPT page adapter. It owns selectors, selection offsets, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
 - `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open and attaches the `提问` action to ChatGPT's native selection toolbar.
 - `src/storage.js` owns the persisted conversation/thread shape and the conversation index used by the management page.
+- `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies across the sidebar and management page.
 - `popup.html` and `src/popup.js` own the extension action menu.
 - `manager.html` and `src/manager.js` own the standalone local management page.
 
