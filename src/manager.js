@@ -3,7 +3,9 @@
 
   const state = {
     conversations: [],
-    activeConversationId: ""
+    activeConversationId: "",
+    loading: false,
+    queuedLoadOptions: null
   };
 
   const listEl = document.getElementById("conversation-list");
@@ -12,7 +14,7 @@
   const detailEl = document.getElementById("thread-detail");
   const conversationTemplate = document.getElementById("conversation-template");
 
-  document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("refresh").addEventListener("click", () => load({ rebuildIndex: true }));
 
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -22,13 +24,32 @@
     });
   }
 
-  async function load() {
-    state.conversations = await CGQAStorage.listConversations();
-    if (!state.conversations.some((item) => item.conversationId === state.activeConversationId)) {
-      state.activeConversationId = state.conversations[0] && state.conversations[0].conversationId || "";
+  async function load(options = {}) {
+    if (state.loading) {
+      state.queuedLoadOptions = {
+        rebuildIndex: Boolean(state.queuedLoadOptions && state.queuedLoadOptions.rebuildIndex || options.rebuildIndex)
+      };
+      return;
     }
-    renderConversations();
-    await renderActiveConversation();
+
+    state.loading = true;
+    try {
+      state.conversations = options.rebuildIndex
+        ? await CGQAStorage.rebuildConversationIndex()
+        : await CGQAStorage.listConversations();
+      if (!state.conversations.some((item) => item.conversationId === state.activeConversationId)) {
+        state.activeConversationId = state.conversations[0] && state.conversations[0].conversationId || "";
+      }
+      renderConversations();
+      await renderActiveConversation();
+    } finally {
+      state.loading = false;
+      if (state.queuedLoadOptions) {
+        const nextOptions = state.queuedLoadOptions;
+        state.queuedLoadOptions = null;
+        await load(nextOptions);
+      }
+    }
   }
 
   function renderConversations() {

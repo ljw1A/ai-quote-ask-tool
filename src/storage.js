@@ -193,6 +193,10 @@
   }
 
   async function listConversations() {
+    const indexed = (await readIndex()).conversations;
+    if (indexed.length > 0) {
+      return indexed.sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
+    }
     return rebuildConversationIndex();
   }
 
