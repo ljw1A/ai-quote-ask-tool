@@ -51,6 +51,7 @@ Before committing changes that touch quote selection, mark rendering, sending, c
 - Send the first question; the draft mark remains, is promoted, and chip count updates.
 - Refresh the page; persisted marks restore conservatively without duplicate chips.
 - Select a full line or list item; the chip stays after the selected text and is not wrapped by the green text highlight.
+- Select inline code such as `<code>mypipe 数组长度太短</code>`; it should render a normal text highlight and chip. Block code inside `pre` should remain conservative.
 - Delete a thread; both the text mark and sibling chip are removed.
 - Use a thinking model; the sidebar does not capture `正在思考` as the final answer.
 - Captured sidebar output does not include plugin chips, hidden prompts, or tracking tokens.

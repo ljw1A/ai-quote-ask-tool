@@ -14,7 +14,7 @@
     "[aria-label='回复操作']",
     "[aria-label='你的消息操作']"
   ].join(",");
-  const COMPLEX_SELECTOR = ".katex, math, pre, code, .cm-editor, .cm-content";
+  const COMPLEX_SELECTOR = ".katex, math, pre, .cm-editor, .cm-content";
   const TURN_SELECTOR = [
     "section[data-turn]",
     "[data-testid^='conversation-turn-'][data-turn]",
@@ -120,6 +120,12 @@
   function isInsideComplexContent(node) {
     const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     return Boolean(element && element.closest(COMPLEX_SELECTOR));
+  }
+
+  function getInlineCodeAncestor(node) {
+    const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    const code = element && element.closest("code");
+    return code && !code.closest("pre") ? code : null;
   }
 
   function isBadSelectionNode(node) {
@@ -565,7 +571,8 @@
     selectedNode.parentNode.insertBefore(mark, selectedNode);
     mark.insertBefore(selectedNode, mark.firstChild);
     if (includeChip) {
-      mark.parentNode.insertBefore(createChipElement(thread, options), mark.nextSibling);
+      const anchor = getInlineCodeAncestor(mark) || mark;
+      anchor.parentNode.insertBefore(createChipElement(thread, options), anchor.nextSibling);
     }
   }
 
