@@ -605,11 +605,14 @@
   function getMainChatHideTargets() {
     const targets = [];
     state.threads.forEach((thread) => {
-      getMainChatItems(thread).forEach((item) => {
+      const mainChatItems = getMainChatItems(thread);
+      const hasPendingReply = hasGeneratingMessage(thread);
+      mainChatItems.forEach((item, index) => {
         if (item && item.promptToken) {
           targets.push({
             threadId: thread.threadId,
-            promptToken: item.promptToken
+            promptToken: item.promptToken,
+            unload: !hasPendingReply || index < mainChatItems.length - 1
           });
         }
       });

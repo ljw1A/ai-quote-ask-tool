@@ -781,7 +781,7 @@
   function syncHiddenMainTurns(targets) {
     const normalizedTargets = normalizeHiddenTargets(targets);
     const records = getAllTurnRecords();
-    const turnsToHide = new Map();
+    const turnsToDecorate = new Map();
 
     records.forEach((record, index) => {
       if (record.role !== "user" || !record.text) {
@@ -793,25 +793,37 @@
         return;
       }
 
-      turnsToHide.set(record.turn, target);
+      turnsToDecorate.set(record.turn, target);
       const assistantRecord = findNextAssistantRecord(records, index);
       if (assistantRecord) {
-        turnsToHide.set(assistantRecord.turn, target);
+        turnsToDecorate.set(assistantRecord.turn, target);
       }
     });
 
     document.querySelectorAll(`.${HIDDEN_TURN_CLASS}`).forEach((turn) => {
-      if (!turnsToHide.has(turn)) {
+      if (!turnsToDecorate.has(turn)) {
         unhideMainTurn(turn);
       }
     });
 
-    turnsToHide.forEach((target, turn) => hideMainTurn(turn, target));
+    turnsToDecorate.forEach((target, turn) => {
+      if (target.unload) {
+        removeMainTurn(turn);
+        return;
+      }
+      hideMainTurn(turn, target);
+    });
   }
 
   function normalizeHiddenTargets(targets) {
     const seen = new Set();
-    return (Array.isArray(targets) ? targets : []).filter((target) => {
+    return (Array.isArray(targets) ? targets : []).map((target) => {
+      const value = target && typeof target === "object" ? target : {};
+      return {
+        ...value,
+        unload: Boolean(value.unload)
+      };
+    }).filter((target) => {
       const promptToken = target && target.promptToken;
       if (!promptToken || seen.has(promptToken)) {
         return false;
@@ -848,6 +860,13 @@
     if (turn.dataset.cgqaHiddenPromptToken !== (target.promptToken || "")) {
       turn.dataset.cgqaHiddenPromptToken = target.promptToken || "";
     }
+  }
+
+  function removeMainTurn(turn) {
+    if (!turn || turn.closest(".cgqa-root")) {
+      return;
+    }
+    turn.remove();
   }
 
   function unhideMainTurn(turn) {
