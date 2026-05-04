@@ -14,7 +14,7 @@
       "js": [
         "src/storage.js",
         "src/sanitize.js",
-        "src/dom.js",
+        "src/providers/chatgpt-dom.js",
         "src/providers/chatgpt.js",
         "src/provider.js",
         "src/sidebar.js",

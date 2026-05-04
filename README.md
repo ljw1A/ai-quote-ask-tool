@@ -30,8 +30,8 @@ Clicking the extension icon opens a small menu. Use `打开提问管理` to open
 The extension is split into these responsibilities:
 
 - `src/content.js` is the orchestration layer. It owns lifecycle, event binding, thread state, and the quote flow: validate selection -> build thread -> register thread -> open panel -> persist thread -> render marker.
-- `src/dom.js` is the current ChatGPT DOM driver. It owns ChatGPT selectors, selection offsets, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
-- `src/providers/chatgpt.js` wraps the ChatGPT DOM driver as a provider. Future AI sites should add their own provider/driver instead of adding host-specific branches to `content.js`.
+- `src/providers/chatgpt-dom.js` is the current ChatGPT DOM driver. It owns ChatGPT selectors, selection offsets, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
+- `src/providers/chatgpt.js` wraps the ChatGPT DOM driver as a provider. Future AI sites should add their own provider registration plus DOM driver instead of adding host-specific branches to `content.js`.
 - `src/provider.js` resolves the active page provider for the current host.
 - `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open and attaches the `提问` action to ChatGPT's native selection toolbar.
 - `src/storage.js` owns the provider-aware persisted conversation/thread shape and the conversation index used by the management page.
@@ -40,6 +40,8 @@ The extension is split into these responsibilities:
 - `manager.html` and `src/manager.js` own the standalone local management page.
 
 When changing behavior, keep the order above intact. Opening the panel should stay independent from storage and marker rendering; those failures should degrade with a toast instead of blocking the visible annotation thread.
+
+Provider code should reuse the shared business flow, not force a shared DOM implementation. Keep lifecycle, storage, sidebar rendering, management, sanitization, and pending-response capture provider-neutral. Keep page-specific DOM selection, quote marking, composer submission, reply extraction, and main-page hiding inside each provider driver, because different AI sites can have very different DOM structures and interaction constraints.
 
 ## Notes
 

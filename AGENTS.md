@@ -10,7 +10,7 @@
   - `src/content.js` owns runtime state, thread lifecycle, persistence timing, and provider-neutral send/capture orchestration.
   - `src/provider.js` owns active page provider resolution.
   - `src/providers/*.js` own provider registration and provider metadata. Add new AI sites here rather than adding host-specific branches to `src/content.js`.
-  - `src/dom.js` currently owns the ChatGPT DOM driver: ChatGPT DOM queries, selection validation, quote anchoring, mark rendering, main composer operations, and assistant message extraction.
+  - `src/providers/*-dom.js` own page-specific DOM drivers: DOM queries, selection validation, quote anchoring, mark rendering, main composer operations, assistant message extraction, and main-page hiding for one provider.
   - `src/sidebar.js` owns plugin UI rendering and panel interactions.
   - `src/storage.js` owns provider-aware persisted thread data shape and migration/reset policy.
   - `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies. Do not duplicate sanitizer allowlists in page-specific modules.
@@ -19,6 +19,14 @@
   - `manager.html` / `src/manager.js` own the standalone management page.
 - Do not introduce a build chain, framework, CDN, or runtime dependency unless the project direction explicitly changes. This is a native Manifest V3 extension.
 - Read and write text files as UTF-8.
+
+## Provider Adaptation Principles
+
+- Reuse provider-neutral business flow, not page DOM mechanics.
+- Keep `src/content.js`, `src/storage.js`, `src/sidebar.js`, `src/manager.js`, and `src/sanitize.js` provider-neutral.
+- Do not force quote offset calculation, DOM marking, composer submission, assistant extraction, or main-page hiding into a shared abstraction before at least two providers prove the behavior is truly identical.
+- When adding a new AI site, create a provider registration file and a provider-specific DOM driver. Avoid changing the ChatGPT DOM driver unless the provider contract itself needs to evolve.
+- If a provider needs a different selection or marking strategy for better user experience, implement it inside that provider driver instead of weakening the ChatGPT path.
 
 ## Quote Mark Lifecycle
 
