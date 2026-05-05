@@ -796,8 +796,15 @@
       || null;
   }
 
+  function getComposerHideContainer() {
+    const composer = getComposerContainer();
+    return composer && composer.closest("input-container")
+      || composer && composer.closest(".input-area-container")
+      || composer;
+  }
+
   function setMainComposerHidden(hidden) {
-    const composer = hidden ? getComposerContainer() : null;
+    const composer = hidden ? getComposerHideContainer() : null;
     document.querySelectorAll(`.${HIDDEN_COMPOSER_CLASS}`).forEach((node) => {
       if (!hidden || node !== composer) {
         node.classList.remove(HIDDEN_COMPOSER_CLASS);
