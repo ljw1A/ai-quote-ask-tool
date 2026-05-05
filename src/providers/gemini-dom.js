@@ -6,7 +6,6 @@
   const HIDDEN_TURN_CLASS = "cgqa-main-turn-hidden";
   const HIDDEN_COMPOSER_CLASS = "cgqa-composer-hidden";
   const HIDDEN_NATIVE_CONTROL_CLASS = "cgqa-native-control-hidden";
-  const INPUT_BLOCKER_CLASS = "cgqa-gemini-input-blocker";
   const TURN_SELECTOR = ".conversation-container";
   const MARKDOWN_SELECTOR = [
     "model-response message-content .markdown",
@@ -27,8 +26,10 @@
     "[role='button']"
   ].join(",");
   const COMPLEX_SELECTOR = ".katex, math, pre, code-block, table-block";
-  let inputBlocker = null;
-  let inputBlockerCleanup = null;
+  const inputBlocker = CGQAProviderInputBlocker.create({
+    getTarget: () => getComposerHideContainer(),
+    isTargetHidden: (target) => target.classList.contains(HIDDEN_COMPOSER_CLASS)
+  });
 
   function getConversationId() {
     const match = location.pathname.match(/\/app\/([^/?#]+)/);
@@ -833,62 +834,7 @@
   }
 
   function syncPendingResponseState(state) {
-    if (!state || !state.active) {
-      removeInputBlocker();
-      return;
-    }
-    ensureInputBlocker();
-    updateInputBlocker();
-  }
-
-  function ensureInputBlocker() {
-    if (!inputBlocker) {
-      inputBlocker = document.createElement("div");
-      inputBlocker.className = INPUT_BLOCKER_CLASS;
-      inputBlocker.setAttribute("aria-hidden", "true");
-      inputBlocker.textContent = "Gemini 正在回复，暂时锁定主输入";
-      document.body.append(inputBlocker);
-    }
-    if (!inputBlockerCleanup) {
-      const update = () => updateInputBlocker();
-      window.addEventListener("resize", update, true);
-      window.addEventListener("scroll", update, true);
-      inputBlockerCleanup = () => {
-        window.removeEventListener("resize", update, true);
-        window.removeEventListener("scroll", update, true);
-      };
-    }
-  }
-
-  function updateInputBlocker() {
-    if (!inputBlocker) {
-      return;
-    }
-    const target = getComposerHideContainer();
-    if (!target || target.classList.contains(HIDDEN_COMPOSER_CLASS)) {
-      inputBlocker.hidden = true;
-      return;
-    }
-
-    const rect = target.getBoundingClientRect();
-    inputBlocker.hidden = rect.width <= 0 || rect.height <= 0;
-    Object.assign(inputBlocker.style, {
-      left: `${Math.max(0, rect.left)}px`,
-      top: `${Math.max(0, rect.top)}px`,
-      width: `${Math.max(0, rect.width)}px`,
-      height: `${Math.max(0, rect.height)}px`
-    });
-  }
-
-  function removeInputBlocker() {
-    if (inputBlockerCleanup) {
-      inputBlockerCleanup();
-      inputBlockerCleanup = null;
-    }
-    if (inputBlocker) {
-      inputBlocker.remove();
-      inputBlocker = null;
-    }
+    inputBlocker.setBlocked(Boolean(state && state.active));
   }
 
   function getNodeControlText(node) {

@@ -55,6 +55,7 @@
       syncHiddenMainTurns: CGQAChatGPTDom.syncHiddenMainTurns,
       setMainComposerHidden: CGQAChatGPTDom.setMainComposerHidden,
       setNativeGenerationControlsHidden: CGQAChatGPTDom.setNativeGenerationControlsHidden,
+      syncPendingResponseState: CGQAChatGPTDom.syncPendingResponseState,
       submitPrompt: CGQAChatGPTDom.submitPrompt
     };
   }

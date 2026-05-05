@@ -849,7 +849,7 @@
   display: none !important;
 }
 
-.cgqa-gemini-input-blocker {
+.cgqa-provider-input-blocker {
   position: fixed;
   z-index: 2147483000;
   display: flex;

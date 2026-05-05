@@ -32,9 +32,10 @@ The extension is split into these responsibilities:
 
 - `src/content.js` is the orchestration layer. It owns lifecycle, event binding, thread state, and the quote flow: validate selection -> build thread -> register thread -> open panel -> persist thread -> render marker.
 - `src/providers/chatgpt-dom.js` is the current ChatGPT DOM driver. It owns ChatGPT selectors, selection offsets, native selection-toolbar attachment, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
-- `src/providers/gemini-dom.js` is the Gemini DOM driver. It owns Gemini selectors, floating selection-action fallback behavior, quote marker rendering/restoration, prompt filling, send button lookup, pending input guarding, Gemini stop-button cleanup, and assistant response capture.
+- `src/providers/gemini-dom.js` is the Gemini DOM driver. It owns Gemini selectors, floating selection-action fallback behavior, quote marker rendering/restoration, prompt filling, send button lookup, Gemini stop-button cleanup, and assistant response capture.
 - `src/providers/chatgpt.js` wraps the ChatGPT DOM driver as a provider. Future AI sites should add their own provider registration plus DOM driver instead of adding host-specific branches to `content.js`.
 - `src/provider.js` resolves the active page provider for the current host.
+- `src/provider-input-blocker.js` owns the shared visual overlay used by providers to lock the native composer while a panel-sent response is pending.
 - `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open, creates the `提问` action button, and falls back to a generic floating button when a provider does not attach the action to its own toolbar.
 - `src/storage.js` owns the provider-aware persisted conversation/thread shape and the conversation index used by the management page.
 - `src/theme.js` and `src/theme.css` own shared theme definitions. Feature code should read or save only the theme key through `src/storage.js`, then apply it through `CGQATheme`.

@@ -23,6 +23,10 @@
     "[data-testid^='conversation-turn-'][data-turn]",
     "[data-message-author-role]"
   ].join(",");
+  const inputBlocker = CGQAProviderInputBlocker.create({
+    getTarget: () => getComposerContainer(),
+    isTargetHidden: (target) => target.classList.contains(HIDDEN_COMPOSER_CLASS)
+  });
   function getConversationId() {
     const match = location.pathname.match(/\/c\/([^/?#]+)/);
     return match ? match[1] : "new-chat";
@@ -1031,6 +1035,10 @@
     });
   }
 
+  function syncPendingResponseState(state) {
+    inputBlocker.setBlocked(Boolean(state && state.active));
+  }
+
   function getNativeGenerationControlCandidates() {
     const nodes = Array.from(document.querySelectorAll([
       "button",
@@ -1376,6 +1384,7 @@
     syncHiddenMainTurns,
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
+    syncPendingResponseState,
     submitPrompt
   };
 })();
