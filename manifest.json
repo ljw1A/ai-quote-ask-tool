@@ -12,6 +12,7 @@
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
       "js": [
+        "src/theme.js",
         "src/storage.js",
         "src/sanitize.js",
         "src/providers/chatgpt-dom.js",
@@ -20,7 +21,7 @@
         "src/sidebar.js",
         "src/content.js"
       ],
-      "css": ["src/styles.css"],
+      "css": ["src/theme.css", "src/styles.css"],
       "run_at": "document_idle"
     }
   ]

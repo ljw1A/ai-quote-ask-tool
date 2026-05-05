@@ -7,6 +7,8 @@
   const DEFAULT_PROVIDER_ID = "chatgpt";
   const DEFAULT_PROVIDER_LABEL = "ChatGPT";
   const REPLY_STYLE_MODES = new Set(["default", "longer", "shorter", "custom"]);
+  const THEME_MODES = new Set(["green", "pink", "blue", "gold", "slate"]);
+  const DEFAULT_THEME = "green";
 
   function normalizeConversationRef(ref) {
     if (ref && typeof ref === "object") {
@@ -391,7 +393,7 @@
     await removeConversationSummary(conversationRef);
   }
 
-  function normalizeReplyStyleSettings(settings) {
+  function normalizeSettings(settings) {
     const replyStyle = settings && settings.replyStyle || {};
     const customPrompt = String(replyStyle.customPrompt || "").trim();
     const selectedMode = REPLY_STYLE_MODES.has(replyStyle.mode) ? replyStyle.mode : "default";
@@ -400,16 +402,17 @@
       replyStyle: {
         mode,
         customPrompt
-      }
+      },
+      theme: normalizeTheme(settings && settings.theme)
     };
   }
 
   async function getSettings() {
-    return normalizeReplyStyleSettings(await readChrome(SETTINGS_KEY));
+    return normalizeSettings(await readChrome(SETTINGS_KEY));
   }
 
   async function saveSettings(settings) {
-    const nextSettings = normalizeReplyStyleSettings(settings);
+    const nextSettings = normalizeSettings(settings);
     await writeChrome(SETTINGS_KEY, {
       ...nextSettings,
       updatedAt: Date.now()
@@ -430,6 +433,27 @@
     return saved.replyStyle;
   }
 
+  function normalizeTheme(theme) {
+    if (globalThis.CGQATheme && typeof CGQATheme.normalizeTheme === "function") {
+      return CGQATheme.normalizeTheme(theme);
+    }
+    const value = String(theme || "").trim();
+    return THEME_MODES.has(value) ? value : DEFAULT_THEME;
+  }
+
+  async function getThemeSettings() {
+    return (await getSettings()).theme;
+  }
+
+  async function saveThemeSettings(theme) {
+    const current = await getSettings();
+    const saved = await saveSettings({
+      ...current,
+      theme
+    });
+    return saved.theme;
+  }
+
   globalThis.CGQAStorage = {
     listConversations,
     getConversation,
@@ -438,7 +462,11 @@
     deleteThread,
     deleteConversation,
     rebuildConversationIndex,
+    getSettings,
+    saveSettings,
     getReplyStyleSettings,
-    saveReplyStyleSettings
+    saveReplyStyleSettings,
+    getThemeSettings,
+    saveThemeSettings
   };
 })();

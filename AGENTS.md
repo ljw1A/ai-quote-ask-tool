@@ -14,6 +14,7 @@
   - `src/sidebar.js` owns plugin UI rendering and panel interactions.
   - `src/storage.js` owns provider-aware persisted thread data shape and migration/reset policy.
   - `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies. Do not duplicate sanitizer allowlists in page-specific modules.
+  - `src/theme.js` / `src/theme.css` own shared theme definitions. Do not hard-code accent colors in feature modules; save only the theme key through `src/storage.js`.
   - `src/styles.css` owns visual states only; do not encode behavior in CSS class hacks without a JS state owner.
   - `popup.html` / `src/popup.js` own the extension action menu.
   - `manager.html` / `src/manager.js` own the standalone management page.
@@ -55,7 +56,7 @@
 ## UI Rules
 
 - Use inline SVG for plugin icons; do not depend on external icon CDNs.
-- Use the project green theme for focus, hover, active, and accent states. Avoid browser default blue focus outlines.
+- Use the active project theme variables for focus, hover, active, and accent states. Avoid browser default blue focus outlines and one-off hard-coded accent colors.
 - The floating follow-up panel and attached follow-up button should feel native to ChatGPT, but their behavior must remain isolated from ChatGPT's own controls.
 
 ## Regression Checklist

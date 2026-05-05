@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ChatGPT 提问助手</title>
+  <link rel="stylesheet" href="src/theme.css">
   <link rel="stylesheet" href="src/popup.css">
 </head>
 <body>
@@ -22,7 +23,13 @@
         <path d="M9 7h8v8"></path>
       </svg>
     </button>
+    <label class="popup-theme">
+      <span>主题色</span>
+      <select id="theme-select" aria-label="主题色"></select>
+    </label>
   </main>
+  <script src="src/theme.js"></script>
+  <script src="src/storage.js"></script>
   <script src="src/popup.js"></script>
 </body>
 </html>

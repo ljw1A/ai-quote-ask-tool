@@ -21,6 +21,7 @@ Clicking the extension icon opens a small menu. Use `打开提问管理` to open
 - The ChatGPT main composer is visually hidden while a quote panel is open, so follow-up questions go through the panel while the underlying composer remains mounted for scripted submission.
 - Questions typed in the panel are saved in the quote thread and sent through the ChatGPT main composer with the quote as hidden context.
 - The panel can remember a global reply style: default, longer, shorter, or a custom instruction inserted into the generated prompt.
+- The extension can remember a global theme color. Current themes are default green, soft pink, soft blue, soft gold, and graphite gray; the same theme drives quote chips, the floating panel, popup controls, and the management page.
 - Plugin-generated main-chat prompts and their replies are hidden while the quote thread exists, then restored when the quote is deleted.
 - Threads are stored locally with `chrome.storage.local`, grouped by conversation id, and indexed for the standalone management page.
 - The management page can view saved conversations, delete a single question thread, delete all saved threads in a conversation, and open the original conversation URL.
@@ -35,6 +36,7 @@ The extension is split into these responsibilities:
 - `src/provider.js` resolves the active page provider for the current host.
 - `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open and attaches the `提问` action to ChatGPT's native selection toolbar.
 - `src/storage.js` owns the provider-aware persisted conversation/thread shape and the conversation index used by the management page.
+- `src/theme.js` and `src/theme.css` own shared theme definitions. Feature code should read or save only the theme key through `src/storage.js`, then apply it through `CGQATheme`.
 - `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies across the sidebar and management page.
 - `popup.html` and `src/popup.js` own the extension action menu.
 - `manager.html` and `src/manager.js` own the standalone local management page.

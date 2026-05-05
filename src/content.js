@@ -33,6 +33,7 @@
       mode: "default",
       customPrompt: ""
     },
+    theme: "green",
     cleanupTasks: []
   };
 
@@ -59,6 +60,8 @@
     }
     syncProviderState();
     state.replyStyle = await loadReplyStyle();
+    state.theme = await loadTheme();
+    applyTheme(state.theme);
     sidebar = CGQASidebar.buildSidebar({
       onClose: closeSidebar,
       onSend: sendQuestion,
@@ -69,6 +72,7 @@
 
     await loadThreads();
     bindEvents();
+    bindSettingsEvents();
     provider.clearRenderedMarks();
     scheduleRestoreBurst();
     syncPageDecorations();
@@ -94,6 +98,24 @@
     } catch (error) {
       console.error("[CGQA] load reply style failed", error);
       return { mode: "default", customPrompt: "" };
+    }
+  }
+
+  async function loadTheme() {
+    try {
+      return normalizeTheme(await CGQAStorage.getThemeSettings());
+    } catch (error) {
+      console.error("[CGQA] load theme failed", error);
+      return "green";
+    }
+  }
+
+  function applyTheme(theme) {
+    state.theme = normalizeTheme(theme);
+    if (globalThis.CGQATheme && typeof CGQATheme.applyTheme === "function") {
+      CGQATheme.applyTheme(state.theme);
+    } else {
+      document.documentElement.dataset.cgqaTheme = state.theme;
     }
   }
 
@@ -148,6 +170,23 @@
     addEvent(document, "keydown", handleKeydown, true);
     addEvent(document, "click", handleQuoteMarkClick, true);
     bindNavigationEvents();
+  }
+
+  function bindSettingsEvents() {
+    if (!chrome.storage || !chrome.storage.onChanged) {
+      return;
+    }
+
+    const handleStorageChange = (changes, areaName) => {
+      if (areaName !== "local" || !changes["cgqa:settings:v1"]) {
+        return;
+      }
+      loadTheme().then(applyTheme).catch((error) => {
+        console.error("[CGQA] apply changed theme failed", error);
+      });
+    };
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    state.cleanupTasks.push(() => chrome.storage.onChanged.removeListener(handleStorageChange));
   }
 
   function addEvent(target, type, handler, options) {
@@ -558,6 +597,13 @@
       mode,
       customPrompt
     };
+  }
+
+  function normalizeTheme(theme) {
+    if (globalThis.CGQATheme && typeof CGQATheme.normalizeTheme === "function") {
+      return CGQATheme.normalizeTheme(theme);
+    }
+    return ["green", "pink", "blue", "gold", "slate"].includes(theme) ? theme : "green";
   }
 
   async function sendQuestion(rawQuestion) {

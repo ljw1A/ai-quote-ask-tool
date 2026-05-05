@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>提问管理 - ChatGPT 提问助手</title>
+  <link rel="stylesheet" href="src/theme.css">
   <link rel="stylesheet" href="src/manager.css">
 </head>
 <body>
@@ -13,7 +14,13 @@
         <p class="eyebrow">ChatGPT 提问助手</p>
         <h1>提问管理</h1>
       </div>
-      <button id="refresh" class="ghost-button" type="button">刷新</button>
+      <div class="manager-header-actions">
+        <label class="theme-select">
+          <span>主题色</span>
+          <select id="theme-select" aria-label="主题色"></select>
+        </label>
+        <button id="refresh" class="ghost-button" type="button">刷新</button>
+      </div>
     </header>
 
     <section class="manager-grid" aria-live="polite">
@@ -42,6 +49,7 @@
     </button>
   </template>
 
+  <script src="src/theme.js"></script>
   <script src="src/storage.js"></script>
   <script src="src/sanitize.js"></script>
   <script src="src/manager.js"></script>

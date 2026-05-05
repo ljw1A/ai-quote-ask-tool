@@ -12,16 +12,37 @@
   const countEl = document.getElementById("conversation-count");
   const emptyEl = document.getElementById("thread-empty");
   const detailEl = document.getElementById("thread-detail");
+  const themeSelect = document.getElementById("theme-select");
   const conversationTemplate = document.getElementById("conversation-template");
 
   document.getElementById("refresh").addEventListener("click", () => load({ rebuildIndex: true }));
+  themeSelect.addEventListener("change", async () => {
+    const savedTheme = await CGQAStorage.saveThemeSettings(themeSelect.value);
+    applyTheme(savedTheme);
+  });
 
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === "local" && Object.keys(changes).some((key) => key.startsWith("cgqa:"))) {
+      if (areaName !== "local") {
+        return;
+      }
+      if (changes["cgqa:settings:v1"]) {
+        loadTheme().catch((error) => console.error("[CGQA] manager theme sync failed", error));
+      }
+      if (Object.keys(changes).some((key) => key.startsWith("cgqa:") && key !== "cgqa:settings:v1")) {
         load();
       }
     });
+  }
+
+  async function loadTheme() {
+    const theme = await CGQAStorage.getThemeSettings();
+    applyTheme(theme);
+  }
+
+  function applyTheme(theme) {
+    const normalized = CGQATheme.applyTheme(theme);
+    CGQATheme.renderThemeOptions(themeSelect, normalized);
   }
 
   async function load(options = {}) {
@@ -247,6 +268,7 @@
     return Number.isNaN(date.getTime()) || date.getTime() <= 0 ? null : date;
   }
 
+  loadTheme().catch((error) => console.error("[CGQA] manager theme load failed", error));
   load().catch((error) => {
     console.error("[CGQA] manager load failed", error);
     showEmpty();

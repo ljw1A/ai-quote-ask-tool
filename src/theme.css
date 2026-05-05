@@ -1,0 +1,74 @@
+:root {
+  --cgqa-accent-rgb: 16, 185, 129;
+  --cgqa-accent: #10b981;
+  --cgqa-accent-strong: #059669;
+  --cgqa-accent-deep: #047857;
+  --cgqa-accent-text: #064e3b;
+  --cgqa-accent-soft: rgba(var(--cgqa-accent-rgb), 0.1);
+  --cgqa-accent-softer: rgba(var(--cgqa-accent-rgb), 0.07);
+  --cgqa-accent-glow: rgba(var(--cgqa-accent-rgb), 0.2);
+  --cgqa-accent-shadow: rgba(var(--cgqa-accent-rgb), 0.28);
+  --cgqa-accent-border: rgba(var(--cgqa-accent-rgb), 0.24);
+  --cgqa-mark-bg: rgba(217, 249, 231, 0.78);
+  --cgqa-mark-active-bg: rgba(187, 247, 208, 0.95);
+  --cgqa-chip-bg: #daf7e7;
+  --cgqa-chip-hover-bg: #c8f2d9;
+  --cgqa-user-bubble-start: #f8fcf9;
+  --cgqa-user-bubble-end: #f0f8f4;
+}
+
+:root[data-cgqa-theme="pink"] {
+  --cgqa-accent-rgb: 236, 72, 153;
+  --cgqa-accent: #ec4899;
+  --cgqa-accent-strong: #db2777;
+  --cgqa-accent-deep: #be185d;
+  --cgqa-accent-text: #831843;
+  --cgqa-mark-bg: rgba(252, 231, 243, 0.86);
+  --cgqa-mark-active-bg: rgba(251, 207, 232, 0.96);
+  --cgqa-chip-bg: #fce7f3;
+  --cgqa-chip-hover-bg: #fbcfe8;
+  --cgqa-user-bubble-start: #fff8fb;
+  --cgqa-user-bubble-end: #fdf2f8;
+}
+
+:root[data-cgqa-theme="blue"] {
+  --cgqa-accent-rgb: 59, 130, 246;
+  --cgqa-accent: #3b82f6;
+  --cgqa-accent-strong: #2563eb;
+  --cgqa-accent-deep: #1d4ed8;
+  --cgqa-accent-text: #1e3a8a;
+  --cgqa-mark-bg: rgba(219, 234, 254, 0.86);
+  --cgqa-mark-active-bg: rgba(191, 219, 254, 0.96);
+  --cgqa-chip-bg: #dbeafe;
+  --cgqa-chip-hover-bg: #bfdbfe;
+  --cgqa-user-bubble-start: #f8fbff;
+  --cgqa-user-bubble-end: #eff6ff;
+}
+
+:root[data-cgqa-theme="gold"] {
+  --cgqa-accent-rgb: 245, 158, 11;
+  --cgqa-accent: #f59e0b;
+  --cgqa-accent-strong: #d97706;
+  --cgqa-accent-deep: #b45309;
+  --cgqa-accent-text: #78350f;
+  --cgqa-mark-bg: rgba(254, 243, 199, 0.88);
+  --cgqa-mark-active-bg: rgba(253, 230, 138, 0.96);
+  --cgqa-chip-bg: #fef3c7;
+  --cgqa-chip-hover-bg: #fde68a;
+  --cgqa-user-bubble-start: #fffdf5;
+  --cgqa-user-bubble-end: #fffbeb;
+}
+
+:root[data-cgqa-theme="slate"] {
+  --cgqa-accent-rgb: 100, 116, 139;
+  --cgqa-accent: #64748b;
+  --cgqa-accent-strong: #475569;
+  --cgqa-accent-deep: #334155;
+  --cgqa-accent-text: #1f2937;
+  --cgqa-mark-bg: rgba(241, 245, 249, 0.9);
+  --cgqa-mark-active-bg: rgba(226, 232, 240, 0.98);
+  --cgqa-chip-bg: #f1f5f9;
+  --cgqa-chip-hover-bg: #e2e8f0;
+  --cgqa-user-bubble-start: #fbfcfe;
+  --cgqa-user-bubble-end: #f8fafc;
+}
