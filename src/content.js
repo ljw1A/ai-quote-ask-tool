@@ -66,6 +66,7 @@
       onClose: closeSidebar,
       onSend: sendQuestion,
       onDeleteThread: deleteActiveThread,
+      getAssistantLabel: () => state.providerLabel,
       getReplyStyle: () => state.replyStyle,
       onReplyStyleChange: saveReplyStyle
     });

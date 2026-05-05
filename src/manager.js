@@ -185,15 +185,16 @@
 
     const quote = createElement("blockquote", "quote-block", thread.quoteText || "");
     const messages = createElement("div", "message-list");
-    (thread.messages || []).forEach((message) => messages.append(renderMessage(message)));
+    const assistantLabel = String(thread.sourceProviderLabel || conversation.providerLabel || "AI").trim() || "AI";
+    (thread.messages || []).forEach((message) => messages.append(renderMessage(message, assistantLabel)));
     card.append(header, quote, messages);
     return card;
   }
 
-  function renderMessage(message) {
+  function renderMessage(message, assistantLabel) {
     const item = createElement("section", `message-item message-${message.role || "assistant"}`);
     item.append(
-      createElement("div", "message-label", message.role === "user" ? "你" : "ChatGPT"),
+      createElement("div", "message-label", message.role === "user" ? "你" : assistantLabel),
       createMessageBody(message)
     );
     return item;

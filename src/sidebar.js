@@ -165,10 +165,11 @@
 
     const quote = createElement("blockquote", "cgqa-quote-preview", thread.quoteText || "");
     const messages = createElement("div", "cgqa-messages");
+    const assistantLabel = getAssistantLabel(callbacks, thread);
     if (!thread.messages || thread.messages.length === 0) {
       messages.append(createElement("div", "cgqa-empty", "还没有围绕这段内容的提问。"));
     } else {
-      thread.messages.forEach((message) => messages.append(renderMessage(message)));
+      thread.messages.forEach((message) => messages.append(renderMessage(message, assistantLabel)));
     }
 
     const footer = createElement("footer", "cgqa-panel-footer");
@@ -557,11 +558,16 @@
     }));
   }
 
-  function renderMessage(message) {
+  function getAssistantLabel(callbacks, thread) {
+    const value = callbacks.getAssistantLabel && callbacks.getAssistantLabel();
+    return String(value || thread && thread.sourceProviderLabel || "AI").trim() || "AI";
+  }
+
+  function renderMessage(message, assistantLabel) {
     const item = createElement("article", `cgqa-message cgqa-message-${message.role}`);
     const content = createElement("div", "cgqa-message-content");
     const labelRow = createElement("div", "cgqa-message-label-row");
-    const meta = createElement("div", "cgqa-message-meta", message.role === "user" ? "你" : "ChatGPT");
+    const meta = createElement("div", "cgqa-message-meta", message.role === "user" ? "你" : assistantLabel);
     const body = createElement("div", "cgqa-message-body");
     const createdAt = getValidDate(message.createdAt);
     const time = createElement("time", "cgqa-message-time", formatMessageTime(createdAt));

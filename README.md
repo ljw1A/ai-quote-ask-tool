@@ -1,6 +1,6 @@
 # ChatGPT Quote Annotation
 
-Chrome/Edge Manifest V3 browser extension for lightweight quote annotation threads on ChatGPT.
+Chrome/Edge Manifest V3 browser extension for lightweight quote annotation threads on ChatGPT and Gemini.
 
 ## Install for Development
 
@@ -8,18 +8,18 @@ Chrome/Edge Manifest V3 browser extension for lightweight quote annotation threa
 2. Enable developer mode.
 3. Click "Load unpacked".
 4. Select this project directory.
-5. Open `https://chatgpt.com/`.
+5. Open `https://chatgpt.com/` or `https://gemini.google.com/`.
 
 Clicking the extension icon opens a small menu. Use `打开提问管理` to open the standalone local management page.
 
 ## MVP Behavior
 
-- Select text inside a ChatGPT assistant reply.
-- Click the `提问` button attached to ChatGPT's native selection toolbar.
+- Select text inside a supported assistant reply.
+- Click the `提问` button. On ChatGPT it attaches to the native selection toolbar; on providers without a native quote toolbar it appears as a floating button near the selection.
 - The selected reply text receives a lightweight `提问 N` marker.
 - A draggable floating annotation panel opens for that quote.
-- The ChatGPT main composer is visually hidden while a quote panel is open, so follow-up questions go through the panel while the underlying composer remains mounted for scripted submission.
-- Questions typed in the panel are saved in the quote thread and sent through the ChatGPT main composer with the quote as hidden context.
+- The provider's main composer is visually hidden while a quote panel is open, so follow-up questions go through the panel while the underlying composer remains mounted for scripted submission.
+- Questions typed in the panel are saved in the quote thread and sent through the provider's main composer with the quote as hidden context.
 - The panel can remember a global reply style: default, longer, shorter, or a custom instruction inserted into the generated prompt.
 - The extension can remember a global theme color. Current themes are default green, soft pink, soft blue, soft gold, and graphite gray; the same theme drives quote chips, the floating panel, popup controls, and the management page.
 - Plugin-generated main-chat prompts and their replies are hidden while the quote thread exists, then restored when the quote is deleted.
@@ -32,6 +32,7 @@ The extension is split into these responsibilities:
 
 - `src/content.js` is the orchestration layer. It owns lifecycle, event binding, thread state, and the quote flow: validate selection -> build thread -> register thread -> open panel -> persist thread -> render marker.
 - `src/providers/chatgpt-dom.js` is the current ChatGPT DOM driver. It owns ChatGPT selectors, selection offsets, native selection-toolbar attachment, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
+- `src/providers/gemini-dom.js` is the Gemini DOM driver. It owns Gemini selectors, floating selection-action fallback behavior, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
 - `src/providers/chatgpt.js` wraps the ChatGPT DOM driver as a provider. Future AI sites should add their own provider registration plus DOM driver instead of adding host-specific branches to `content.js`.
 - `src/provider.js` resolves the active page provider for the current host.
 - `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open, creates the `提问` action button, and falls back to a generic floating button when a provider does not attach the action to its own toolbar.
@@ -48,7 +49,7 @@ Provider code should reuse the shared business flow, not force a shared DOM impl
 ## Notes
 
 - The extension does not call OpenAI APIs directly.
-- Data stays local unless ChatGPT itself receives a question through the page composer.
+- Data stays local unless the active provider itself receives a question through the page composer.
 - Saved conversations are keyed by provider id and conversation id so future AI-page adapters can share the same manager without id collisions.
 - Code blocks and formulas are handled conservatively so the extension does not corrupt ChatGPT's rendered DOM.
 - If a saved quote cannot be matched safely after refresh or response switching, the extension does not render a marker.
