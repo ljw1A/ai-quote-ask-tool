@@ -45,6 +45,7 @@
 
   let sidebar = null;
   let provider = null;
+  let pendingScrollLock = null;
 
   function uid(prefix) {
     if (crypto && crypto.randomUUID) {
@@ -58,6 +59,7 @@
     if (!provider) {
       return;
     }
+    pendingScrollLock = CGQAScrollLock.create();
     syncProviderState();
     state.replyStyle = await loadReplyStyle();
     state.theme = await loadTheme();
@@ -270,6 +272,9 @@
     state.pendingSelection = null;
     state.pendingResponse = null;
     stopPendingCaptureWatcher();
+    if (pendingScrollLock) {
+      pendingScrollLock.unlock();
+    }
     clearPendingStableTimer();
   }
 
@@ -648,6 +653,7 @@
     };
     thread.messages.push(userMessage, assistantMessage);
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
+    pendingScrollLock.lock();
     await saveAndRenderThread(thread);
     syncPageDecorations();
     startPendingCaptureWatcher();
@@ -658,6 +664,7 @@
     } catch (error) {
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
+      pendingScrollLock.unlock();
       clearPendingStableTimer();
       assistantMessage.content = error.message || "发送失败。";
       assistantMessage.status = "failed";
@@ -772,6 +779,7 @@
     if (!thread) {
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
+      pendingScrollLock.unlock();
       clearPendingStableTimer();
       return;
     }
@@ -782,6 +790,7 @@
     if (!generating) {
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
+      pendingScrollLock.unlock();
       clearPendingStableTimer();
       return;
     }
@@ -791,6 +800,7 @@
       generating.status = "failed";
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
+      pendingScrollLock.unlock();
       clearPendingStableTimer();
       saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
         console.error("[CGQA] save timeout state failed", error);
@@ -842,6 +852,7 @@
       await saveAndRenderThread(thread);
       await completeProviderPendingResponse(completedResponse);
       state.pendingResponse = null;
+      pendingScrollLock.unlock();
       syncPageDecorations();
     }, RESPONSE_STABLE_DELAY_MS);
   }
@@ -1032,6 +1043,7 @@
     if (state.pendingResponse && state.pendingResponse.threadId === threadId) {
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
+      pendingScrollLock.unlock();
       clearPendingStableTimer();
     }
     await CGQAStorage.deleteThread(getConversationRef(), threadId);
@@ -1078,6 +1090,9 @@
     clearRestoreTimers();
     clearPendingStableTimer();
     stopPendingCaptureWatcher();
+    if (pendingScrollLock) {
+      pendingScrollLock.unlock();
+    }
     state.cleanupTasks.splice(0).forEach((cleanup) => cleanup());
     CGQASidebar.hideSelectionMenu();
     if (sidebar && typeof sidebar.destroy === "function") {

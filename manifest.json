@@ -16,6 +16,7 @@
         "src/storage.js",
         "src/sanitize.js",
         "src/provider-input-blocker.js",
+        "src/scroll-lock.js",
         "src/providers/chatgpt-dom.js",
         "src/providers/chatgpt.js",
         "src/providers/gemini-dom.js",
