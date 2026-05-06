@@ -1086,6 +1086,19 @@
       || null;
   }
 
+  function getScrollContainer() {
+    const chatScrollRoot = Array.from(document.querySelectorAll("[class*='group/scroll-root']")).find(isScrollableElement);
+    return chatScrollRoot || document.scrollingElement || document.documentElement;
+  }
+
+  function isScrollableElement(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const style = getComputedStyle(element);
+    return /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 8;
+  }
+
   function setMainComposerHidden(hidden) {
     const composer = hidden ? getComposerContainer() : null;
 
@@ -1475,6 +1488,7 @@
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
+    getScrollContainer,
     submitPrompt
   };
 })();

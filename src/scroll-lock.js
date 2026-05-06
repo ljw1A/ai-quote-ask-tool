@@ -14,40 +14,42 @@
     "Spacebar"
   ]);
 
-  function create() {
+  function create(options = {}) {
     let active = false;
     let userScrolling = false;
-    let lockedX = 0;
-    let lockedY = 0;
-    let restoreTimer = 0;
+    let scrollTarget = null;
+    let lockedLeft = 0;
+    let lockedTop = 0;
+    let restoring = false;
     let relockTimer = 0;
+    const getTarget = typeof options.getTarget === "function" ? options.getTarget : getDefaultTarget;
 
     function lock() {
       unlock();
+      scrollTarget = resolveTarget();
       active = true;
       userScrolling = false;
-      lockedX = window.scrollX;
-      lockedY = window.scrollY;
+      const position = getPosition(scrollTarget);
+      lockedLeft = position.left;
+      lockedTop = position.top;
       USER_SCROLL_EVENTS.forEach((type) => window.addEventListener(type, handleUserScrollIntent, {
         capture: true,
         passive: true
       }));
-      window.addEventListener("scroll", handleScroll, true);
+      addScrollListener(scrollTarget);
     }
 
     function unlock() {
-      if (restoreTimer) {
-        clearTimeout(restoreTimer);
-        restoreTimer = 0;
-      }
       if (relockTimer) {
         clearTimeout(relockTimer);
         relockTimer = 0;
       }
+      removeScrollListener(scrollTarget);
       active = false;
       userScrolling = false;
+      restoring = false;
+      scrollTarget = null;
       USER_SCROLL_EVENTS.forEach((type) => window.removeEventListener(type, handleUserScrollIntent, true));
-      window.removeEventListener("scroll", handleScroll, true);
     }
 
     function handleUserScrollIntent(event) {
@@ -57,33 +59,21 @@
       if (event.type === "keydown" && !SCROLL_KEYS.has(event.key)) {
         return;
       }
+      if (event.type !== "keydown" && !isEventInsideScrollTarget(event)) {
+        return;
+      }
       pauseForUserScroll();
     }
 
     function handleScroll() {
-      if (!active || userScrolling) {
+      if (!active || userScrolling || restoring) {
         return;
       }
-      if (restoreTimer) {
-        return;
-      }
-      restoreTimer = setTimeout(() => {
-        restoreTimer = 0;
-        if (!active || userScrolling) {
-          return;
-        }
-        if (window.scrollX !== lockedX || window.scrollY !== lockedY) {
-          window.scrollTo(lockedX, lockedY);
-        }
-      }, 0);
+      restoreLockedPosition();
     }
 
     function pauseForUserScroll() {
       userScrolling = true;
-      if (restoreTimer) {
-        clearTimeout(restoreTimer);
-        restoreTimer = 0;
-      }
       if (relockTimer) {
         clearTimeout(relockTimer);
       }
@@ -92,10 +82,99 @@
         if (!active) {
           return;
         }
-        lockedX = window.scrollX;
-        lockedY = window.scrollY;
+        const position = getPosition(scrollTarget);
+        lockedLeft = position.left;
+        lockedTop = position.top;
         userScrolling = false;
       }, USER_SCROLL_IDLE_MS);
+    }
+
+    function restoreLockedPosition() {
+      const position = getPosition(scrollTarget);
+      if (position.left === lockedLeft && position.top === lockedTop) {
+        return;
+      }
+      restoring = true;
+      setPosition(scrollTarget, { left: lockedLeft, top: lockedTop });
+      requestAnimationFrame(() => {
+        restoring = false;
+      });
+    }
+
+    function resolveTarget() {
+      const target = getTarget();
+      if (isUsableElement(target) || target === window) {
+        return target;
+      }
+      return getDefaultTarget();
+    }
+
+    function getDefaultTarget() {
+      return document.scrollingElement || document.documentElement || window;
+    }
+
+    function isUsableElement(target) {
+      return target && target.nodeType === Node.ELEMENT_NODE;
+    }
+
+    function isWindowTarget(target) {
+      return target === window;
+    }
+
+    function addScrollListener(target) {
+      if (isWindowTarget(target)) {
+        window.addEventListener("scroll", handleScroll, true);
+        return;
+      }
+      target.addEventListener("scroll", handleScroll, { passive: true });
+    }
+
+    function removeScrollListener(target) {
+      if (!target) {
+        return;
+      }
+      if (isWindowTarget(target)) {
+        window.removeEventListener("scroll", handleScroll, true);
+        return;
+      }
+      target.removeEventListener("scroll", handleScroll);
+    }
+
+    function getPosition(target) {
+      if (isWindowTarget(target)) {
+        return {
+          left: window.scrollX,
+          top: window.scrollY
+        };
+      }
+      return {
+        left: target.scrollLeft,
+        top: target.scrollTop
+      };
+    }
+
+    function setPosition(target, position) {
+      if (isWindowTarget(target)) {
+        window.scrollTo(position.left, position.top);
+        return;
+      }
+      target.scrollLeft = position.left;
+      target.scrollTop = position.top;
+    }
+
+    function isEventInsideScrollTarget(event) {
+      if (isWindowTarget(scrollTarget)) {
+        return !isInsidePluginUi(event.target);
+      }
+      const element = event.target && event.target.nodeType === Node.TEXT_NODE
+        ? event.target.parentElement
+        : event.target;
+      return Boolean(element && !isInsidePluginUi(element) && (element === scrollTarget || scrollTarget.contains(element)));
+    }
+
+    function isInsidePluginUi(node) {
+      const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      return Boolean(element && element.closest(".cgqa-root"));
     }
 
     return {

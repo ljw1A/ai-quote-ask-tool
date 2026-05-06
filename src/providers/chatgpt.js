@@ -56,6 +56,7 @@
       setMainComposerHidden: CGQAChatGPTDom.setMainComposerHidden,
       setNativeGenerationControlsHidden: CGQAChatGPTDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQAChatGPTDom.syncPendingResponseState,
+      getScrollContainer: CGQAChatGPTDom.getScrollContainer,
       submitPrompt: CGQAChatGPTDom.submitPrompt
     };
   }

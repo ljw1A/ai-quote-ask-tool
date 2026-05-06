@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.3-scroll-lock-before-send";
+  const CONTENT_VERSION = "0.7.4-provider-scroll-lock-target";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -59,7 +59,9 @@
     if (!provider) {
       return;
     }
-    pendingScrollLock = CGQAScrollLock.create();
+    pendingScrollLock = CGQAScrollLock.create({
+      getTarget: () => provider && provider.getScrollContainer ? provider.getScrollContainer() : null
+    });
     syncProviderState();
     state.replyStyle = await loadReplyStyle();
     state.theme = await loadTheme();
