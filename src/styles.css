@@ -780,13 +780,37 @@
   transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
-.cgqa-quote-mark * {
+.cgqa-quote-mark:not(.cgqa-quote-mark-surface) * {
   color: inherit !important;
 }
 
 .cgqa-quote-mark.is-active {
   background: var(--cgqa-mark-active-bg);
   box-shadow: 0 0 0 2px var(--cgqa-accent-glow);
+}
+
+.cgqa-quote-mark-surface {
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border-bottom: 0;
+  padding: 0;
+  outline: 2px solid var(--cgqa-accent-border);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 5px var(--cgqa-mark-bg);
+}
+
+.cgqa-quote-mark-surface:hover {
+  outline-color: var(--cgqa-accent);
+  box-shadow: 0 0 0 5px var(--cgqa-mark-active-bg);
+}
+
+.cgqa-quote-mark-surface.is-active {
+  background: transparent;
+  outline-color: var(--cgqa-accent);
+  box-shadow:
+    0 0 0 5px var(--cgqa-mark-active-bg),
+    0 0 0 8px var(--cgqa-accent-glow);
 }
 
 .cgqa-quote-mark-block {

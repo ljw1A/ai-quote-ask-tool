@@ -17,7 +17,8 @@
     "[aria-label='回复操作']",
     "[aria-label='你的消息操作']"
   ].join(",");
-  const COMPLEX_SELECTOR = ".katex, math, pre, .cm-editor, .cm-content";
+  const COMPLEX_SELECTOR = ".katex, math, pre, table, .cm-editor, .cm-content";
+  const SURFACE_MARK_CLASS = "cgqa-quote-mark-surface";
   const TURN_SELECTOR = [
     "section[data-turn]",
     "[data-testid^='conversation-turn-'][data-turn]",
@@ -509,6 +510,13 @@
     }
   }
 
+  function clearQuotePartDataset(element) {
+    delete element.dataset.quoteId;
+    delete element.dataset.threadId;
+    delete element.dataset.displayIndex;
+    delete element.dataset.draft;
+  }
+
   function promoteQuotePart(element, thread) {
     delete element.dataset.draft;
     element.dataset.displayIndex = String(thread.displayIndex || "");
@@ -536,6 +544,16 @@
     return chip;
   }
 
+  function applySurfaceMark(block, thread, options = {}) {
+    block.classList.add("cgqa-quote-mark", SURFACE_MARK_CLASS);
+    applyQuotePartDataset(block, thread, options);
+  }
+
+  function clearSurfaceMark(mark) {
+    mark.classList.remove("cgqa-quote-mark", SURFACE_MARK_CLASS, "is-active");
+    clearQuotePartDataset(mark);
+  }
+
   function getChipText(thread) {
     const count = (thread.messages || []).filter((message) => message.role === "user").length;
     return count > 0 ? `提问 ${thread.displayIndex} · ${count}` : `提问 ${thread.displayIndex}`;
@@ -548,6 +566,11 @@
   }
 
   function unwrapMark(mark) {
+    if (mark.classList.contains(SURFACE_MARK_CLASS)) {
+      clearSurfaceMark(mark);
+      return;
+    }
+
     if (mark.classList.contains("cgqa-quote-mark-block")) {
       mark.remove();
       return;
@@ -681,13 +704,11 @@
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
     const block = complex ? complex.closest(COMPLEX_SELECTOR) : null;
-    if (!block || !markdown.contains(block)) {
+    if (!block || !markdown.contains(block) || block.closest(MARK_SELECTOR) || block.querySelector(MARK_SELECTOR)) {
       return false;
     }
 
-    const mark = createMarkElement(thread, true, options);
-    mark.append(createChipElement(thread, options));
-    block.insertAdjacentElement("afterend", mark);
+    applySurfaceMark(block, thread, options);
     return true;
   }
 
