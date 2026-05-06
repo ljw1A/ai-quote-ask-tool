@@ -797,7 +797,8 @@
   }
 
   function getAllTurns() {
-    const sectionTurns = Array.from(document.querySelectorAll("section[data-testid^='conversation-turn-'][data-turn], section[data-turn]"));
+    const sectionTurns = Array.from(document.querySelectorAll("section[data-testid^='conversation-turn-'][data-turn], section[data-turn]"))
+      .map(getTurnContainerForMessageNode);
     const messageTurns = Array.from(document.querySelectorAll("[data-message-author-role='user'], [data-message-author-role='assistant']"))
       .map(getTurnContainerForMessageNode);
     return sortElementsByDocumentOrder(uniqueElements([...sectionTurns, ...messageTurns]));
@@ -832,7 +833,8 @@
   }
 
   function getAssistantTurns() {
-    const sectionTurns = Array.from(document.querySelectorAll("section[data-turn='assistant']"));
+    const sectionTurns = Array.from(document.querySelectorAll("section[data-turn='assistant']"))
+      .map(getTurnContainerForMessageNode);
     const messageTurns = Array.from(document.querySelectorAll("[data-message-author-role='assistant']"))
       .map(getTurnContainerForMessageNode);
     return sortElementsByDocumentOrder(uniqueElements([...sectionTurns, ...messageTurns]));
@@ -843,15 +845,13 @@
   }
 
   function getTurnContainerForMessageNode(node) {
-    return node.closest([
-      "section[data-turn]",
-      "section[data-testid^='conversation-turn-']",
-      "[data-testid^='conversation-turn-']",
-      ".agent-turn",
-      ".user-turn",
-      "[class*='group/turn-messages']"
-    ].join(","))
+    return getVisualTurnShell(node)
+      || node.closest("section[data-turn], section[data-testid^='conversation-turn-'], [data-testid^='conversation-turn-']")
       || node;
+  }
+
+  function getVisualTurnShell(node) {
+    return node ? node.closest(".agent-turn, .user-turn, [class*='group/turn-messages']") : null;
   }
 
   function uniqueElements(elements) {
@@ -901,10 +901,9 @@
       }
 
       turnsToDecorate.set(record.turn, target);
-      const assistantRecord = findNextAssistantRecord(records, index);
-      if (assistantRecord) {
+      getAssistantRecordsBeforeNextUser(records, index).forEach((assistantRecord) => {
         turnsToDecorate.set(assistantRecord.turn, target);
-      }
+      });
     });
 
     document.querySelectorAll(`.${HIDDEN_TURN_CLASS}`).forEach((turn) => {
@@ -944,23 +943,25 @@
     return targets.find((target) => text.includes(target.promptToken)) || null;
   }
 
-  function findNextAssistantRecord(records, startIndex) {
+  function getAssistantRecordsBeforeNextUser(records, startIndex) {
+    const assistantRecords = [];
     for (let index = startIndex + 1; index < records.length; index += 1) {
       const record = records[index];
-      if (record.role === "assistant" && record.text) {
-        return record;
-      }
       if (record.role === "user") {
-        return null;
+        break;
+      }
+      if (record.role === "assistant") {
+        assistantRecords.push(record);
       }
     }
-    return null;
+    return assistantRecords;
   }
 
   function hideMainTurn(turn, target) {
     if (!turn.classList.contains(HIDDEN_TURN_CLASS)) {
       turn.classList.add(HIDDEN_TURN_CLASS);
     }
+    hideThoughtControlsForTurn(turn);
     if (turn.dataset.cgqaHiddenThreadId !== (target.threadId || "")) {
       turn.dataset.cgqaHiddenThreadId = target.threadId || "";
     }
@@ -973,6 +974,7 @@
     if (!turn || turn.closest(".cgqa-root")) {
       return;
     }
+    hideThoughtControlsForTurn(turn);
     turn.remove();
   }
 
@@ -986,6 +988,39 @@
     if (turn.dataset.cgqaHiddenPromptToken !== undefined) {
       delete turn.dataset.cgqaHiddenPromptToken;
     }
+    unhideThoughtControlsForTurn(turn);
+  }
+
+  function hideThoughtControlsForTurn(turn) {
+    getThoughtControlCandidates(turn).forEach((node) => {
+      node.classList.add(HIDDEN_NATIVE_CONTROL_CLASS);
+      node.dataset.cgqaHiddenThoughtControl = "true";
+    });
+  }
+
+  function unhideThoughtControlsForTurn(turn) {
+    getThoughtControlCandidates(turn).forEach((node) => {
+      if (node.dataset.cgqaHiddenThoughtControl === "true") {
+        node.classList.remove(HIDDEN_NATIVE_CONTROL_CLASS);
+        delete node.dataset.cgqaHiddenThoughtControl;
+      }
+    });
+  }
+
+  function getThoughtControlCandidates(turn) {
+    if (!turn) {
+      return [];
+    }
+    const shell = getVisualTurnShell(turn) || turn;
+    return Array.from(shell.querySelectorAll("button")).filter(isThoughtControl);
+  }
+
+  function isThoughtControl(button) {
+    const text = getNodeControlText(button).replace(/\s+/g, " ").trim();
+    return /^thought for\b/i.test(text)
+      || /^thoughts?$/i.test(text)
+      || /^已思考\b/.test(text)
+      || /^思考(过程|详情)?$/.test(text);
   }
 
   function getPromptEditor() {
