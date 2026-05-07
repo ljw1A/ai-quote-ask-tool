@@ -6,6 +6,14 @@
   const HIDDEN_TURN_CLASS = "cgqa-main-turn-hidden";
   const HIDDEN_COMPOSER_CLASS = "cgqa-composer-hidden";
   const HIDDEN_NATIVE_CONTROL_CLASS = "cgqa-native-control-hidden";
+  const BLOCK_REFERENCE_SELECTOR = "pre, code-block, table-block, table";
+  const SURFACE_SELECTOR = ".katex, math";
+  const COMPLEX_SELECTOR = `${SURFACE_SELECTOR}, ${BLOCK_REFERENCE_SELECTOR}`;
+  const SURFACE_MARK_CLASS = "cgqa-quote-mark-surface";
+  const BLOCK_REFERENCE_BAR_CLASS = "cgqa-block-reference-bar";
+  const BLOCK_REFERENCE_CHIP_CLASS = "cgqa-block-reference-chip";
+  const BLOCK_REFERENCE_MORE_CLASS = "cgqa-block-reference-more";
+  const BLOCK_REFERENCE_VISIBLE_LIMIT = 2;
   const TURN_SELECTOR = ".conversation-container";
   const MARKDOWN_SELECTOR = [
     "model-response message-content .markdown",
@@ -15,6 +23,7 @@
   const BAD_SELECTION_SELECTOR = [
     ".cgqa-root",
     ".cgqa-selection-menu",
+    `.${BLOCK_REFERENCE_BAR_CLASS}`,
     ".cgqa-toast",
     "model-thoughts",
     ".thoughts-container",
@@ -25,7 +34,6 @@
     "button",
     "[role='button']"
   ].join(",");
-  const COMPLEX_SELECTOR = ".katex, math, pre, code-block, table-block";
   const inputBlocker = CGQAProviderInputBlocker.create({
     getTarget: () => getComposerHideContainer(),
     isTargetHidden: (target) => target.classList.contains(HIDDEN_COMPOSER_CLASS)
@@ -90,6 +98,45 @@
     return Boolean(element && element.closest(COMPLEX_SELECTOR));
   }
 
+  function getSharedBlockReferenceTarget(markdown, range) {
+    const startBlock = getBlockReferenceTarget(markdown, range.startContainer);
+    const endBlock = getBlockReferenceTarget(markdown, range.endContainer);
+    if (!startBlock || !endBlock || startBlock !== endBlock || !markdown.contains(startBlock)) {
+      return null;
+    }
+    return startBlock;
+  }
+
+  function getBlockReferenceTarget(markdown, node) {
+    const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!element) {
+      return null;
+    }
+
+    const table = element.closest("table-block, table");
+    if (table) {
+      return getMarkdownDirectChild(markdown, table) || table;
+    }
+
+    const codeBlock = element.closest("code-block, pre");
+    if (!codeBlock) {
+      return null;
+    }
+    return getMarkdownDirectChild(markdown, codeBlock) || codeBlock;
+  }
+
+  function getMarkdownDirectChild(markdown, node) {
+    if (!markdown || !node || !markdown.contains(node)) {
+      return null;
+    }
+
+    let current = node;
+    while (current && current.parentElement && current.parentElement !== markdown) {
+      current = current.parentElement;
+    }
+    return current && current.parentElement === markdown ? current : null;
+  }
+
   function getInlineCodeAncestor(node) {
     const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     const code = element && element.closest("code");
@@ -146,6 +193,7 @@
   function removeNonContentNodes(root) {
     root.querySelectorAll([
       CHIP_SELECTOR,
+      `.${BLOCK_REFERENCE_BAR_CLASS}`,
       "model-thoughts",
       "tts-control",
       "bard-avatar",
@@ -198,7 +246,7 @@
           return NodeFilter.FILTER_REJECT;
         }
         const parent = node.parentElement;
-        if (parent && parent.closest(`${CHIP_SELECTOR}, model-thoughts, button, script, style`)) {
+        if (parent && parent.closest(`${CHIP_SELECTOR}, .${BLOCK_REFERENCE_BAR_CLASS}, model-thoughts, button, script, style`)) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -375,14 +423,21 @@
     }
   }
 
+  function clearQuotePartDataset(element) {
+    delete element.dataset.quoteId;
+    delete element.dataset.threadId;
+    delete element.dataset.displayIndex;
+    delete element.dataset.draft;
+  }
+
   function promoteQuotePart(element, thread) {
     delete element.dataset.draft;
     element.dataset.displayIndex = String(thread.displayIndex || "");
   }
 
-  function createMarkElement(thread, blockMode, options = {}) {
-    const mark = document.createElement(blockMode ? "div" : "span");
-    mark.className = blockMode ? "cgqa-quote-mark cgqa-quote-mark-block" : "cgqa-quote-mark";
+  function createMarkElement(thread, options = {}) {
+    const mark = document.createElement("span");
+    mark.className = "cgqa-quote-mark";
     applyQuotePartDataset(mark, thread, options);
     return mark;
   }
@@ -401,6 +456,121 @@
     return chip;
   }
 
+  function createBlockReferenceChip(thread, options = {}) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = BLOCK_REFERENCE_CHIP_CLASS;
+    applyQuotePartDataset(chip, thread, options);
+    chip.textContent = getChipText(thread);
+    chip.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      globalThis.CGQAApp && globalThis.CGQAApp.openThread(thread.threadId);
+    });
+    return chip;
+  }
+
+  function createBlockReferenceMoreButton(hiddenChips) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = BLOCK_REFERENCE_MORE_CLASS;
+    more.textContent = `更多 ${hiddenChips.length}`;
+    more.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const threads = hiddenChips.map((chip) => {
+        return globalThis.CGQAApp && globalThis.CGQAApp.getThread
+          ? globalThis.CGQAApp.getThread(chip.dataset.threadId)
+          : null;
+      }).filter(Boolean);
+      if (threads.length === 1) {
+        globalThis.CGQAApp.openThread(threads[0].threadId);
+        return;
+      }
+      if (threads.length > 1) {
+        CGQASidebar.showThreadChoiceMenu(more.getBoundingClientRect(), threads, (threadId) => {
+          globalThis.CGQAApp && globalThis.CGQAApp.openThread(threadId);
+        });
+      }
+    });
+    return more;
+  }
+
+  function applySurfaceMark(block, thread, options = {}) {
+    block.classList.add("cgqa-quote-mark", SURFACE_MARK_CLASS);
+    applyQuotePartDataset(block, thread, options);
+  }
+
+  function clearSurfaceMark(mark) {
+    mark.classList.remove("cgqa-quote-mark", SURFACE_MARK_CLASS, "is-active");
+    clearQuotePartDataset(mark);
+  }
+
+  function createBlockReferenceBar(block) {
+    const bar = document.createElement("div");
+    bar.className = BLOCK_REFERENCE_BAR_CLASS;
+    bar.dataset.cgqaBlockReferenceKind = getBlockReferenceKind(block);
+    const chips = document.createElement("div");
+    chips.className = "cgqa-block-reference-chips";
+    const note = document.createElement("span");
+    note.className = "cgqa-block-reference-note";
+    note.textContent = getBlockReferenceNote(block);
+    bar.append(chips, note);
+    block.parentNode.insertBefore(bar, block);
+    return bar;
+  }
+
+  function getBlockReferenceBar(block) {
+    const previous = block.previousElementSibling;
+    if (previous && previous.classList.contains(BLOCK_REFERENCE_BAR_CLASS)) {
+      return previous;
+    }
+    return createBlockReferenceBar(block);
+  }
+
+  function getBlockReferenceKind(block) {
+    return block && (block.matches("table, table-block") || block.querySelector("table, table-block")) ? "table" : "code";
+  }
+
+  function getBlockReferenceNote(block) {
+    return getBlockReferenceKind(block) === "table" ? "引用自下方表格" : "引用自下方代码块";
+  }
+
+  function getBlockReferenceChips(bar) {
+    return Array.from(bar.querySelectorAll(`.${BLOCK_REFERENCE_CHIP_CLASS}`));
+  }
+
+  function updateBlockReferenceBar(bar) {
+    const chips = getBlockReferenceChips(bar);
+    const oldMore = bar.querySelector(`.${BLOCK_REFERENCE_MORE_CLASS}`);
+    if (oldMore) {
+      oldMore.remove();
+    }
+
+    chips.forEach((chip, index) => {
+      chip.hidden = index >= BLOCK_REFERENCE_VISIBLE_LIMIT;
+    });
+
+    const hiddenChips = chips.slice(BLOCK_REFERENCE_VISIBLE_LIMIT);
+    if (hiddenChips.length > 0) {
+      const note = bar.querySelector(".cgqa-block-reference-note");
+      bar.insertBefore(createBlockReferenceMoreButton(hiddenChips), note || null);
+    }
+  }
+
+  function removeBlockReferenceChip(chip) {
+    const bar = chip.closest(`.${BLOCK_REFERENCE_BAR_CLASS}`);
+    chip.remove();
+    if (!bar) {
+      return;
+    }
+    if (getBlockReferenceChips(bar).length === 0) {
+      bar.remove();
+      return;
+    }
+    updateBlockReferenceBar(bar);
+  }
+
   function getChipText(thread) {
     const count = (thread.messages || []).filter((message) => message.role === "user").length;
     return count > 0 ? `提问 ${thread.displayIndex} · ${count}` : `提问 ${thread.displayIndex}`;
@@ -410,11 +580,18 @@
     document.querySelectorAll(getThreadChipSelector(thread.threadId)).forEach((chip) => {
       chip.textContent = getChipText(thread);
     });
+    document.querySelectorAll(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(thread.threadId)}']`).forEach((chip) => {
+      chip.textContent = getChipText(thread);
+      const bar = chip.closest(`.${BLOCK_REFERENCE_BAR_CLASS}`);
+      if (bar) {
+        updateBlockReferenceBar(bar);
+      }
+    });
   }
 
   function unwrapMark(mark) {
-    if (mark.classList.contains("cgqa-quote-mark-block")) {
-      mark.remove();
+    if (mark.classList.contains(SURFACE_MARK_CLASS)) {
+      clearSurfaceMark(mark);
       return;
     }
 
@@ -433,6 +610,7 @@
 
   function clearRenderedMarks() {
     document.querySelectorAll(CHIP_SELECTOR).forEach((chip) => chip.remove());
+    document.querySelectorAll(`.${BLOCK_REFERENCE_BAR_CLASS}`).forEach((bar) => bar.remove());
     document.querySelectorAll(MARK_SELECTOR).forEach((mark) => unwrapMark(mark));
   }
 
@@ -441,6 +619,7 @@
       return;
     }
     document.querySelectorAll(getThreadChipSelector(threadId)).forEach((chip) => chip.remove());
+    document.querySelectorAll(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(threadId)}']`).forEach(removeBlockReferenceChip);
     document.querySelectorAll(getThreadMarkSelector(threadId)).forEach(unwrapMark);
   }
 
@@ -448,17 +627,24 @@
     const marks = document.querySelectorAll(getThreadMarkSelector(thread.threadId));
     marks.forEach((mark) => promoteQuotePart(mark, thread));
     document.querySelectorAll(getThreadChipSelector(thread.threadId)).forEach((chip) => promoteQuotePart(chip, thread));
+    document.querySelectorAll(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(thread.threadId)}']`).forEach((chip) => promoteQuotePart(chip, thread));
     updateMarkChip(thread);
-    return marks.length > 0;
+    return marks.length > 0 || Boolean(document.querySelector(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(thread.threadId)}']`));
   }
 
   function hasThreadMark(threadId) {
-    return Boolean(threadId && document.querySelector(getThreadMarkSelector(threadId)));
+    return Boolean(threadId && (
+      document.querySelector(getThreadMarkSelector(threadId))
+      || document.querySelector(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(threadId)}']`)
+    ));
   }
 
   function setActiveMark(threadId) {
     document.querySelectorAll(MARK_SELECTOR).forEach((mark) => {
       mark.classList.toggle("is-active", mark.dataset.threadId === threadId);
+    });
+    document.querySelectorAll(`.${BLOCK_REFERENCE_CHIP_CLASS}`).forEach((chip) => {
+      chip.classList.toggle("is-active", chip.dataset.threadId === threadId);
     });
   }
 
@@ -520,7 +706,7 @@
       selectedNode = selectedNode.splitText(slice.start);
     }
 
-    const mark = createMarkElement(thread, false, options);
+    const mark = createMarkElement(thread, options);
     selectedNode.parentNode.insertBefore(mark, selectedNode);
     mark.insertBefore(selectedNode, mark.firstChild);
     if (includeChip) {
@@ -529,25 +715,46 @@
     }
   }
 
-  function markBlock(markdown, range, thread, options = {}) {
+  function markSurfaceBlock(markdown, range, thread, options = {}) {
     const complex = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
-    const block = complex ? complex.closest(COMPLEX_SELECTOR) : null;
-    if (!block || !markdown.contains(block)) {
+    const block = complex ? complex.closest(SURFACE_SELECTOR) : null;
+    if (!block || !markdown.contains(block) || block.closest(MARK_SELECTOR) || block.querySelector(MARK_SELECTOR)) {
       return false;
     }
 
-    const mark = createMarkElement(thread, true, options);
-    mark.append(createChipElement(thread, options));
-    block.insertAdjacentElement("afterend", mark);
+    applySurfaceMark(block, thread, options);
     return true;
+  }
+
+  function markBlockReference(markdown, range, thread, options = {}) {
+    const block = getSharedBlockReferenceTarget(markdown, range);
+    if (!block || !block.parentNode) {
+      return false;
+    }
+    const bar = getBlockReferenceBar(block);
+    if (bar.querySelector(`.${BLOCK_REFERENCE_CHIP_CLASS}[data-thread-id='${CSS.escape(thread.threadId)}']`)) {
+      return false;
+    }
+    const chips = bar.querySelector(".cgqa-block-reference-chips");
+    chips.append(createBlockReferenceChip(thread, options));
+    updateBlockReferenceBar(bar);
+    return true;
+  }
+
+  function markComplexContent(markdown, range, thread, options = {}) {
+    if (getSharedBlockReferenceTarget(markdown, range)) {
+      return markBlockReference(markdown, range, thread, options);
+    }
+
+    return markSurfaceBlock(markdown, range, thread, options);
   }
 
   function renderThreadMark(thread) {
     const turn = findTurnForThread(thread);
     const markdown = getMarkdownNode(turn);
-    if (!markdown || markdown.querySelector(`${MARK_SELECTOR}[data-thread-id='${CSS.escape(thread.threadId)}']`)) {
+    if (!markdown || hasThreadMark(thread.threadId)) {
       return false;
     }
 
@@ -556,7 +763,7 @@
       return false;
     }
     if (isInsideComplexContent(range.startContainer) || isInsideComplexContent(range.endContainer)) {
-      return markBlock(markdown, range, thread);
+      return markComplexContent(markdown, range, thread);
     }
     return wrapRange(markdown, range, thread);
   }
@@ -566,7 +773,7 @@
       return false;
     }
     if (isInsideComplexContent(range.startContainer) || isInsideComplexContent(range.endContainer)) {
-      return markBlock(markdown, range, thread, { draft: true });
+      return markComplexContent(markdown, range, thread, { draft: true });
     }
     return wrapRange(markdown, range, thread, { draft: true });
   }

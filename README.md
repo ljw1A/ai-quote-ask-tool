@@ -34,7 +34,7 @@ The popup opens the standalone local management page. It does not toggle the in-
 - On ChatGPT, the plugin attaches its `提问` action next to ChatGPT's native selection toolbar when possible.
 - On providers without a compatible native selection toolbar, the plugin shows a floating selection action near the selection.
 - The selected text is highlighted and receives a `提问 N` chip when the DOM can safely support an inline chip.
-- ChatGPT code blocks and tables use a block reference bar before the block, such as `引用自下方代码块` or `引用自下方表格`, so copying block content is not affected.
+- ChatGPT and Gemini code blocks/tables use a block reference bar before the block, such as `引用自下方代码块` or `引用自下方表格`, so copying block content is not affected.
 - Block reference bars show up to two `提问` chips and fold additional chips into `更多 N`.
 - Formula surfaces still use a conservative clickable surface mark instead of inserting a chip into fragile DOM.
 - Inline code is supported as normal selectable text.
@@ -155,6 +155,6 @@ Provider-specific DOM behavior should stay inside `src/providers/*-dom.js`. Shar
 - Cross-thought selection in ChatGPT is intentionally not supported.
 - Cross-message or cross-user/assistant selection is intentionally rejected.
 - Formula marking is conservative to avoid corrupting provider-rendered DOM.
-- ChatGPT code blocks and tables are referenced by a bar before the block rather than by inline text marks, so selecting exact code/table text is preserved in storage but the visible page marker is block-level.
+- ChatGPT and Gemini code blocks/tables are referenced by a bar before the block rather than by inline text marks, so selecting exact code/table text is preserved in storage but the visible page marker is block-level.
 - Already-unloaded hidden main-chat DOM cannot be manually refreshed until the provider page re-renders it, for example after a page refresh.
 - If a saved quote cannot be matched safely after provider DOM changes, the extension keeps the saved thread but does not force-render an unsafe mark.
