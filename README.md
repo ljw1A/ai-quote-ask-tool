@@ -1,58 +1,158 @@
 # AI Quote Annotation
 
-Chrome/Edge Manifest V3 browser extension for lightweight quote annotation threads on ChatGPT and Gemini.
+Chrome/Edge Manifest V3 browser extension for quote-based follow-up questions on AI chat pages.
 
-## Install for Development
+The extension lets you select a small piece of an assistant reply, create a local `提问` thread for that quote, and continue asking short follow-up questions in a floating panel without polluting the main conversation view.
+
+## Supported Pages
+
+- ChatGPT normal conversations: `https://chatgpt.com/c/*`
+- ChatGPT GPT/project-style conversations: `https://chatgpt.com/g/*`
+- Legacy ChatGPT host equivalents under `https://chat.openai.com/c/*` and `https://chat.openai.com/g/*`
+- Gemini conversations: `https://gemini.google.com/app/*`
+
+ChatGPT content scripts are allowed to load on the wider ChatGPT host so SPA navigation from the homepage into a supported route can be detected. The runtime only activates the plugin on supported conversation routes. Gemini is currently injected only under `/app/*`.
+
+## Install For Development
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable developer mode.
-3. Click "Load unpacked".
+3. Click `Load unpacked`.
 4. Select this project directory.
-5. Open `https://chatgpt.com/` or `https://gemini.google.com/`.
+5. Open a supported ChatGPT or Gemini conversation page.
 
-Clicking the extension icon opens a small menu. Use `打开提问管理` to open the standalone local management page.
+Clicking the extension icon opens a small popup:
 
-## MVP Behavior
+- `ChatGPT 提问助手`
+- `打开提问管理`
 
-- Select text inside a supported assistant reply.
-- Click the `提问` button. On ChatGPT it attaches to the native selection toolbar; on providers without a native quote toolbar it appears as a floating button near the selection.
-- The selected reply text receives a lightweight `提问 N` marker.
-- A draggable floating annotation panel opens for that quote.
-- The provider's main composer is visually hidden while a quote panel is open, so follow-up questions go through the panel while the underlying composer remains mounted for scripted submission.
-- Questions typed in the panel are saved in the quote thread and sent through the provider's main composer with the quote as hidden context.
-- The panel can remember a global reply style: default, longer, shorter, or a custom instruction inserted into the generated prompt.
-- The extension can remember a global theme color. Current themes are default green, soft pink, soft blue, soft gold, and graphite gray; the same theme drives quote chips, the floating panel, popup controls, and the management page.
-- Plugin-generated main-chat prompts and their replies are hidden while the quote thread exists, then restored when the quote is deleted.
-- Threads are stored locally with `chrome.storage.local`, grouped by conversation id, and indexed for the standalone management page.
-- The management page can view saved conversations, delete a single question thread, delete all saved threads in a conversation, and open the original conversation URL.
+The popup opens the standalone local management page. It does not toggle the in-page panel.
 
-## Internal Flow
+## Core Features
 
-The extension is split into these responsibilities:
+- Select text inside a supported assistant reply and click `提问`.
+- On ChatGPT, the plugin attaches its `提问` action next to ChatGPT's native selection toolbar when possible.
+- On providers without a compatible native selection toolbar, the plugin shows a floating selection action near the selection.
+- The selected text is highlighted and receives a `提问 N` chip when the DOM can safely support an inline chip.
+- Complex areas such as tables and formulas use a conservative clickable surface mark instead of inserting a chip into fragile DOM.
+- ChatGPT code blocks can highlight the exact selected code text without adding a chip.
+- Inline code is supported as normal selectable text.
+- Closing a newly opened draft without sending removes the draft mark.
+- Sending the first question promotes the draft mark into a persisted thread.
+- Repeated questions on the same quote stay in the same local thread.
+- Multiple quote threads can exist in the same conversation, including overlapping normal text marks.
 
-- `src/content.js` is the orchestration layer. It owns lifecycle, event binding, thread state, and the quote flow: validate selection -> build thread -> register thread -> open panel -> persist thread -> render marker.
-- `src/providers/chatgpt-dom.js` is the current ChatGPT DOM driver. It owns ChatGPT selectors, selection offsets, native selection-toolbar attachment, quote marker rendering/restoration, prompt filling, send button lookup, and assistant response capture.
-- `src/providers/gemini-dom.js` is the Gemini DOM driver. It owns Gemini selectors, floating selection-action fallback behavior, quote marker rendering/restoration, prompt filling, send button lookup, Gemini stop-button cleanup, and assistant response capture.
-- `src/providers/chatgpt.js` wraps the ChatGPT DOM driver as a provider. Future AI sites should add their own provider registration plus DOM driver instead of adding host-specific branches to `content.js`.
-- `src/provider.js` resolves the active page provider for the current host.
-- `src/provider-input-blocker.js` owns the shared visual overlay used by providers to lock the native composer while a panel-sent response is pending.
-- `src/sidebar.js` is the panel and selection-action renderer. It rebuilds the overlay panel on open, creates the `提问` action button, and falls back to a generic floating button when a provider does not attach the action to its own toolbar.
-- `src/storage.js` owns the provider-aware persisted conversation/thread shape and the conversation index used by the management page.
-- `src/theme.js` and `src/theme.css` own shared theme definitions. Feature code should read or save only the theme key through `src/storage.js`, then apply it through `CGQATheme`.
-- `src/sanitize.js` owns shared safe HTML rendering for saved assistant replies across the sidebar and management page.
-- `popup.html` and `src/popup.js` own the extension action menu.
-- `manager.html` and `src/manager.js` own the standalone local management page.
+## Floating Follow-up Panel
 
-When changing behavior, keep the order above intact. Opening the panel should stay independent from storage and marker rendering; those failures should degrade with a toast instead of blocking the visible annotation thread.
+- The panel is draggable and stays as a floating overlay.
+- Only one thread panel is shown at a time.
+- The panel displays:
+  - quote preview,
+  - user questions,
+  - assistant replies,
+  - reply style control,
+  - bottom follow-up input,
+  - delete action.
+- The native page composer is visually hidden while a panel is open, so the user naturally works through the panel.
+- During a panel-sent response, a shared input blocker prevents accidental typing into the provider composer.
+- The panel input is fixed-size, auto-wraps text, and scrolls after its maximum height.
+- Assistant messages render sanitized HTML when the provider's page DOM exposes Markdown-derived HTML.
+- Each assistant message has a small icon-only refresh button with the title `重新获取回复`.
 
-Provider code should reuse the shared business flow, not force a shared DOM implementation. Keep lifecycle, storage, sidebar rendering, management, sanitization, and pending-response capture provider-neutral. Keep page-specific DOM selection, quote marking, composer submission, reply extraction, and main-page hiding inside each provider driver, because different AI sites can have very different DOM structures and interaction constraints.
+## Sending And Capturing Replies
 
-Provider-specific response side effects should use the pending lifecycle hooks exposed by the provider contract. Do not add host-specific branches to `src/content.js` for things like input guarding, native stop-button cleanup, or page-specific generation state repair.
+- The extension does not call OpenAI, Google, or any model API directly.
+- Follow-up questions are sent through the provider's normal web composer.
+- The generated prompt includes the selected quote and the user's question as context.
+- Plugin-generated main-chat prompts and model replies are hidden from the main page while the quote thread exists.
+- The latest active thread reply is kept hidden, not unloaded, while the panel is open so the refresh button can re-read it from the page DOM.
+- When the panel is closed after a reply has been captured, hidden main-chat DOM can be unloaded to reduce page cost.
+- If a reply is still pending, the latest hidden DOM is kept until capture completes.
+- The manual refresh button re-extracts the corresponding assistant reply from the provider page DOM and updates the saved sidebar message when newer or fuller content is available.
+- The refresh button does not resend the question.
 
-## Notes
+## Provider-specific Behavior
 
-- The extension does not call OpenAI APIs directly.
-- Data stays local unless the active provider itself receives a question through the page composer.
-- Saved conversations are keyed by provider id and conversation id so future AI-page adapters can share the same manager without id collisions.
-- Code blocks and formulas are handled conservatively so the extension does not corrupt ChatGPT's rendered DOM.
-- If a saved quote cannot be matched safely after refresh or response switching, the extension does not render a marker.
+### ChatGPT
+
+- Supports `/c/*` and `/g/*` conversation routes.
+- Handles thinking-model replies where a single visible assistant turn can contain multiple assistant message nodes separated by one or more thought buttons.
+- Text before and after a thought button can be selected as long as the selection stays inside one Markdown segment.
+- Cross-thought selection is intentionally not supported.
+- Assistant capture ignores transient status labels such as `正在思考`, `Thinking`, `Reasoning`, and `ChatGPT 说:`.
+- The plugin hides ChatGPT thought controls that belong to plugin-generated hidden turns.
+- The page scroll lock targets ChatGPT's internal `group/scroll-root` container rather than `window`.
+
+### Gemini
+
+- Supports `https://gemini.google.com/app/*`.
+- Uses Gemini-specific DOM selectors for turns, messages, composer, send button, and assistant extraction.
+- Uses the shared pending input blocker and scroll lock.
+- The page scroll lock targets Gemini's `infinite-scroller.chat-history` container.
+- Includes Gemini-specific pending cleanup for the native stop button/input state.
+- Manual reply refresh is available in the same panel UI as ChatGPT.
+
+## Reply Style And Theme
+
+The panel stores global reply style settings in local extension storage:
+
+- `默认`
+- `长一点`
+- `短一点`
+- `自定义`
+
+`自定义` uses inline editing in the bottom action area. The saved custom instruction is inserted into future panel-generated prompts.
+
+The extension also stores a global theme key. Current themes:
+
+- green
+- pink
+- blue
+- gold
+- slate
+
+The active theme drives quote marks, chips, panel focus states, popup controls, and the management page.
+
+## Local Storage And Management Page
+
+- Threads are stored in `chrome.storage.local`.
+- Stored data is provider-aware and grouped by provider id plus conversation id.
+- The management page reads structured storage data only; it does not scan ChatGPT or Gemini DOM.
+- The management page supports:
+  - viewing saved conversations,
+  - viewing saved quote threads,
+  - deleting a single thread,
+  - deleting all saved threads for a conversation,
+  - opening the original conversation URL.
+
+Deleting a thread removes the corresponding local record and removes visible quote marks/chips from the current page when possible.
+
+## Architecture
+
+- `src/content.js` owns provider-neutral runtime state, route activation, quote thread lifecycle, prompt construction, persistence timing, pending-response capture, manual reply refresh, main-chat hiding, and scroll-lock orchestration.
+- `src/provider.js` resolves the active provider from registered providers.
+- `src/providers/chatgpt.js` registers ChatGPT provider metadata and exposes the ChatGPT DOM driver through the provider contract.
+- `src/providers/chatgpt-dom.js` owns ChatGPT DOM queries, selection validation, segmented Markdown handling, quote anchoring, mark rendering/restoration, composer submission, assistant extraction, hidden main-turn handling, and ChatGPT scroll target lookup.
+- `src/providers/gemini.js` registers Gemini provider metadata and exposes the Gemini DOM driver through the provider contract.
+- `src/providers/gemini-dom.js` owns Gemini DOM queries, selection validation, quote anchoring, mark rendering/restoration, composer submission, assistant extraction, pending cleanup, and Gemini scroll target lookup.
+- `src/sidebar.js` owns the floating panel, selection action UI, reply style controls, assistant refresh button UI, and panel interactions.
+- `src/storage.js` owns persisted conversation/thread data and migration/reset policy.
+- `src/sanitize.js` owns safe HTML rendering for saved assistant replies.
+- `src/theme.js` and `src/theme.css` own shared theme definitions.
+- `src/provider-input-blocker.js` owns the shared pending-response overlay for native composers.
+- `src/scroll-lock.js` owns the provider-targeted scroll lock used during panel-sent responses.
+- `popup.html` and `src/popup.js` own the extension action popup.
+- `manager.html` and `src/manager.js` own the standalone management page.
+
+Provider-specific DOM behavior should stay inside `src/providers/*-dom.js`. Shared business flow should stay provider-neutral in `src/content.js`.
+
+## Known Boundaries
+
+- The extension is designed for desktop Chrome/Edge Manifest V3.
+- It does not sync data to the cloud.
+- It does not call model APIs directly.
+- Cross-thought selection in ChatGPT is intentionally not supported.
+- Cross-message or cross-user/assistant selection is intentionally rejected.
+- Formula/table marking is conservative to avoid corrupting provider-rendered DOM.
+- Already-unloaded hidden main-chat DOM cannot be manually refreshed until the provider page re-renders it, for example after a page refresh.
+- If a saved quote cannot be matched safely after provider DOM changes, the extension keeps the saved thread but does not force-render an unsafe mark.
