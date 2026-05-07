@@ -7,7 +7,7 @@
   const HIDDEN_COMPOSER_CLASS = "cgqa-composer-hidden";
   const HIDDEN_NATIVE_CONTROL_CLASS = "cgqa-native-control-hidden";
   const BLOCK_REFERENCE_SELECTOR = "pre, code-block, table-block, table";
-  const SURFACE_SELECTOR = ".katex, math";
+  const SURFACE_SELECTOR = ".math-block[data-math], [data-math], .katex, math";
   const COMPLEX_SELECTOR = `${SURFACE_SELECTOR}, ${BLOCK_REFERENCE_SELECTOR}`;
   const SURFACE_MARK_CLASS = "cgqa-quote-mark-surface";
   const BLOCK_REFERENCE_BAR_CLASS = "cgqa-block-reference-bar";
@@ -716,16 +716,93 @@
   }
 
   function markSurfaceBlock(markdown, range, thread, options = {}) {
-    const complex = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
-      ? range.commonAncestorContainer
-      : range.commonAncestorContainer.parentElement;
-    const block = complex ? complex.closest(SURFACE_SELECTOR) : null;
+    const block = getSurfaceTarget(markdown, range.commonAncestorContainer);
     if (!block || !markdown.contains(block) || block.closest(MARK_SELECTOR) || block.querySelector(MARK_SELECTOR)) {
       return false;
     }
 
     applySurfaceMark(block, thread, options);
     return true;
+  }
+
+  function getSurfaceTarget(markdown, node) {
+    const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!element) {
+      return null;
+    }
+
+    const mathBlock = element.closest(".math-block[data-math], [data-math]");
+    if (mathBlock && markdown.contains(mathBlock)) {
+      return mathBlock;
+    }
+
+    const surface = element.closest(SURFACE_SELECTOR);
+    return surface && markdown.contains(surface) ? surface : null;
+  }
+
+  function markSurfaceByAnchor(markdown, thread, options = {}) {
+    const block = findSurfaceByAnchor(markdown, thread.anchor || {});
+    if (!block || block.closest(MARK_SELECTOR) || block.querySelector(MARK_SELECTOR)) {
+      return false;
+    }
+
+    applySurfaceMark(block, thread, options);
+    return true;
+  }
+
+  function findSurfaceByAnchor(markdown, anchor) {
+    const exactText = normalizeText(anchor && anchor.exactText || "").trim();
+    if (!markdown || !exactText || !isFormulaLikeText(exactText)) {
+      return null;
+    }
+
+    const matches = getSurfaceCandidates(markdown).filter((surface) => {
+      return isSurfaceTextMatch(surface, exactText);
+    });
+
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function getSurfaceCandidates(markdown) {
+    const seen = new Set();
+    return Array.from(markdown.querySelectorAll(SURFACE_SELECTOR)).map((surface) => {
+      return getSurfaceTarget(markdown, surface) || surface;
+    }).filter((surface) => {
+      if (!surface || seen.has(surface)) {
+        return false;
+      }
+      seen.add(surface);
+      return true;
+    });
+  }
+
+  function isSurfaceTextMatch(surface, exactText) {
+    const surfaceTexts = [
+      getSurfaceText(surface),
+      surface.getAttribute("data-math") || ""
+    ].map(normalizeFormulaComparable).filter(Boolean);
+    const exact = normalizeFormulaComparable(exactText);
+    return Boolean(exact && surfaceTexts.some((surfaceText) => {
+      return surfaceText === exact || surfaceText.includes(exact) || exact.includes(surfaceText);
+    }));
+  }
+
+  function getSurfaceText(surface) {
+    const clone = surface.cloneNode(true);
+    normalizeKatexNodes(clone, { keepFallbackText: true });
+    return normalizeText(clone.innerText || clone.textContent || "").trim();
+  }
+
+  function normalizeFormulaComparable(text) {
+    return normalizeText(text)
+      .replace(/\\left|\\right/g, "")
+      .replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g, "$1/$2")
+      .replace(/[\\{}\s\u200b]/g, "")
+      .trim();
+  }
+
+  function isFormulaLikeText(text) {
+    return /[=+\-*/^_()\\]|\\frac|\\sqrt|\\sum|\\int/.test(text);
   }
 
   function markBlockReference(markdown, range, thread, options = {}) {
@@ -760,7 +837,7 @@
 
     const range = resolveAnchorRange(markdown, thread.anchor || {});
     if (!range) {
-      return false;
+      return markSurfaceByAnchor(markdown, thread);
     }
     if (isInsideComplexContent(range.startContainer) || isInsideComplexContent(range.endContainer)) {
       return markComplexContent(markdown, range, thread);
