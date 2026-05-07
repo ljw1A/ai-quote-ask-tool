@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.7-chatgpt-multi-message-turns";
+  const CONTENT_VERSION = "0.7.8-manual-answer-refresh";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -76,6 +76,7 @@
       onClose: closeSidebar,
       onBeforeSend: lockPendingScroll,
       onSend: sendQuestion,
+      onRefreshAssistantMessage: refreshAssistantMessage,
       onDeleteThread: deleteActiveThread,
       getAssistantLabel: () => state.providerLabel,
       getReplyStyle: () => state.replyStyle,
@@ -795,10 +796,11 @@
       const hasPendingReply = hasGeneratingMessage(thread);
       mainChatItems.forEach((item, index) => {
         if (item && item.promptToken) {
+          const isLatestActiveItem = thread.threadId === state.activeThreadId && index === mainChatItems.length - 1;
           targets.push({
             threadId: thread.threadId,
             promptToken: item.promptToken,
-            unload: !hasPendingReply || index < mainChatItems.length - 1
+            unload: !isLatestActiveItem && (!hasPendingReply || index < mainChatItems.length - 1)
           });
         }
       });
@@ -1057,6 +1059,54 @@
     }
 
     return null;
+  }
+
+  async function refreshAssistantMessage(threadId, messageIndex) {
+    const thread = getThread(threadId);
+    const message = thread && thread.messages && thread.messages[messageIndex];
+    if (!thread || !message || message.role !== "assistant" || message.status === "generating") {
+      return;
+    }
+
+    const promptToken = getPromptTokenForAssistantMessage(thread, messageIndex);
+    if (!promptToken) {
+      CGQASidebar.showToast("找不到对应的主页面回复。");
+      return;
+    }
+
+    const record = findAssistantRecordAfterPromptToken(thread, provider.getAssistantMessageRecords(), promptToken);
+    if (!record || !record.text) {
+      CGQASidebar.showToast("暂未获取到更新内容。");
+      return;
+    }
+
+    const nextHtml = record.html || "";
+    const unchanged = message.content === record.text && (message.html || "") === nextHtml;
+    if (unchanged) {
+      CGQASidebar.showToast("当前回复已是最新。");
+      return;
+    }
+
+    message.content = record.text;
+    message.html = nextHtml;
+    message.contentFormat = nextHtml ? "html" : "text";
+    message.status = "completed";
+    thread.updatedAt = Date.now();
+    await saveAndRenderThread(thread);
+    syncPageDecorations();
+    CGQASidebar.showToast("已重新获取回复。");
+  }
+
+  function getPromptTokenForAssistantMessage(thread, messageIndex) {
+    const assistantIndex = getAssistantMessageOrdinal(thread, messageIndex);
+    const mainChatItems = getMainChatItems(thread);
+    return mainChatItems[assistantIndex] && mainChatItems[assistantIndex].promptToken || "";
+  }
+
+  function getAssistantMessageOrdinal(thread, messageIndex) {
+    return (thread.messages || []).slice(0, messageIndex + 1).filter((message) => {
+      return message.role === "assistant";
+    }).length - 1;
   }
 
   function findLastPromptUserRecordIndex(records, promptToken) {

@@ -48,6 +48,7 @@
     const icons = {
       arrowUp: ["M12 19V5", "M5 12l7-7 7 7"],
       chevronUp: ["M6 15l6-6 6 6"],
+      refresh: ["M21 12a9 9 0 0 1-15.4 6.4L3 16", "M3 21v-5h5", "M3 12A9 9 0 0 1 18.4 5.6L21 8", "M21 3v5h-5"],
       message: [
         "M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z",
         "M8 9h8",
@@ -169,7 +170,9 @@
     if (!thread.messages || thread.messages.length === 0) {
       messages.append(createElement("div", "cgqa-empty", "还没有围绕这段内容的提问。"));
     } else {
-      thread.messages.forEach((message) => messages.append(renderMessage(message, assistantLabel)));
+      thread.messages.forEach((message, index) => {
+        messages.append(renderMessage(message, assistantLabel, callbacks, thread, index));
+      });
     }
 
     const footer = createElement("footer", "cgqa-panel-footer");
@@ -566,7 +569,7 @@
     return String(value || thread && thread.sourceProviderLabel || "AI").trim() || "AI";
   }
 
-  function renderMessage(message, assistantLabel) {
+  function renderMessage(message, assistantLabel, callbacks, thread, messageIndex) {
     const item = createElement("article", `cgqa-message cgqa-message-${message.role}`);
     const content = createElement("div", "cgqa-message-content");
     const labelRow = createElement("div", "cgqa-message-label-row");
@@ -587,8 +590,39 @@
     labelRow.append(meta);
     body.append(time);
     content.append(labelRow, body);
+    if (shouldShowRefreshButton(message, callbacks)) {
+      content.append(renderAssistantRefreshAction(callbacks, thread, messageIndex));
+    }
     item.append(content);
     return item;
+  }
+
+  function shouldShowRefreshButton(message, callbacks) {
+    return Boolean(
+      message
+      && message.role === "assistant"
+      && message.status !== "generating"
+      && typeof callbacks.onRefreshAssistantMessage === "function"
+    );
+  }
+
+  function renderAssistantRefreshAction(callbacks, thread, messageIndex) {
+    const actions = createElement("div", "cgqa-message-actions");
+    const button = createElement("button", "cgqa-message-refresh");
+    button.type = "button";
+    button.title = "重新获取回复";
+    button.setAttribute("aria-label", "重新获取回复");
+    button.append(createSvgIcon("refresh", "cgqa-svg-icon cgqa-message-refresh-icon"));
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      button.classList.add("is-loading");
+      Promise.resolve(callbacks.onRefreshAssistantMessage(thread.threadId, messageIndex)).finally(() => {
+        button.disabled = false;
+        button.classList.remove("is-loading");
+      });
+    });
+    actions.append(button);
+    return actions;
   }
 
   function renderMessageBody(body, message) {
