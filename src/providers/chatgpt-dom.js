@@ -108,12 +108,22 @@
     return turn.querySelector("[data-message-author-role='assistant']");
   }
 
-  function getMarkdownNode(turn) {
+  function getMarkdownNodes(turn) {
     const message = getMessageNode(turn);
     if (!message) {
-      return null;
+      return [];
     }
-    return message.querySelector(".markdown.prose, .markdown-new-styling, .markdown");
+    return Array.from(message.querySelectorAll(".markdown.prose, .markdown-new-styling, .markdown")).filter((markdown) => {
+      return !markdown.parentElement || !markdown.parentElement.closest(".markdown.prose, .markdown-new-styling, .markdown");
+    });
+  }
+
+  function getMarkdownNodeContainingNode(turn, node) {
+    return getMarkdownNodes(turn).find((markdown) => isInMarkdown(markdown, node)) || null;
+  }
+
+  function getMarkdownNodeIndex(turn, markdown) {
+    return getMarkdownNodes(turn).indexOf(markdown);
   }
 
   function getMessageId(turn) {
@@ -334,13 +344,14 @@
     };
   }
 
-  function createAnchorFromRange(markdown, range) {
+  function createAnchorFromRange(markdown, range, markdownIndex) {
     const offsets = getRangeOffsets(markdown, range);
     if (!isValidTextSpan(offsets)) {
       return null;
     }
     return {
       ...offsets,
+      markdownIndex,
       ...makeAnchorText(markdown, offsets.startOffset, offsets.endOffset)
     };
   }
@@ -362,10 +373,17 @@
       return { ok: false, reason: "暂不支持跨回复提问，请重新选择同一条回复中的内容。" };
     }
 
-    const markdown = getMarkdownNode(startTurn);
-    if (!markdown || !isInMarkdown(markdown, range.startContainer) || !isInMarkdown(markdown, range.endContainer)) {
+    const startMarkdown = getMarkdownNodeContainingNode(startTurn, range.startContainer);
+    const endMarkdown = getMarkdownNodeContainingNode(startTurn, range.endContainer);
+    if (!startMarkdown || !endMarkdown) {
       return { ok: false, reason: "请只选择 ChatGPT 回复正文，不要选择思考提示或操作按钮。" };
     }
+    if (startMarkdown !== endMarkdown) {
+      return { ok: false, reason: "暂不支持跨思考分段选择，请只选择同一段回复正文。" };
+    }
+
+    const markdown = startMarkdown;
+    const markdownIndex = getMarkdownNodeIndex(startTurn, markdown);
 
     if (isBadSelectionNode(range.startContainer) || isBadSelectionNode(range.endContainer)) {
       return { ok: false, reason: "请只选择 ChatGPT 回复正文内容。" };
@@ -376,7 +394,7 @@
       return { ok: false, reason: "选择内容为空。" };
     }
 
-    const anchor = createAnchorFromRange(markdown, range);
+    const anchor = createAnchorFromRange(markdown, range, markdownIndex);
     if (!anchor) {
       return { ok: false, reason: "当前选区结构过于复杂，无法稳定定位。" };
     }
@@ -388,6 +406,7 @@
       range,
       turn: startTurn,
       markdown,
+      markdownIndex,
       selectedText,
       complex,
       ...anchor
@@ -750,15 +769,15 @@
 
   function renderThreadMark(thread) {
     const turn = findTurnForThread(thread);
-    const markdown = getMarkdownNode(turn);
-    if (!markdown || markdown.querySelector(`${MARK_SELECTOR}[data-thread-id='${CSS.escape(thread.threadId)}']`)) {
+    if (!turn || turn.querySelector(`${MARK_SELECTOR}[data-thread-id='${CSS.escape(thread.threadId)}']`)) {
       return false;
     }
 
-    const range = resolveAnchorRange(markdown, thread.anchor || {});
-    if (!range) {
+    const resolved = resolveAnchorMarkdownAndRange(turn, thread.anchor || {});
+    if (!resolved) {
       return false;
     }
+    const { markdown, range } = resolved;
 
     if (isInsideComplexContent(range.startContainer) || isInsideComplexContent(range.endContainer)) {
       return markComplexContent(markdown, range, thread);
@@ -782,6 +801,23 @@
   function resolveAnchorRange(markdown, anchor) {
     const offsetRange = findRangeByOffsets(markdown, anchor);
     return offsetRange || findRangeByContext(markdown, anchor);
+  }
+
+  function resolveAnchorMarkdownAndRange(turn, anchor) {
+    const markdowns = getMarkdownNodes(turn);
+    const preferredIndex = Number.isInteger(anchor.markdownIndex) ? anchor.markdownIndex : -1;
+    const candidates = preferredIndex >= 0 && markdowns[preferredIndex]
+      ? [markdowns[preferredIndex]]
+      : markdowns;
+
+    for (const markdown of candidates) {
+      const range = resolveAnchorRange(markdown, anchor);
+      if (range) {
+        return { markdown, range };
+      }
+    }
+
+    return null;
   }
 
   function findRangeByOffsets(markdown, anchor) {
@@ -865,17 +901,25 @@
     const role = getTurnRole(turn);
     const message = getMessageNodeByRole(turn, role) || turn;
     if (role === "assistant") {
-      const markdown = getMarkdownNode(turn);
-      return markdown ? getReadableText(markdown).trim() : "";
+      return getMarkdownText(getMarkdownNodes(turn));
     }
     return getReadableText(message).trim();
+  }
+
+  function getMarkdownText(markdowns) {
+    return markdowns.map((markdown) => getReadableText(markdown).trim()).filter(Boolean).join("\n\n");
+  }
+
+  function getMarkdownHtml(markdowns) {
+    return markdowns.map((markdown) => getSanitizedHtml(markdown)).filter(Boolean).join("");
   }
 
   function getAllTurnRecords() {
     return getAllTurns().map((turn, index) => {
       const role = getTurnRole(turn);
       const message = getMessageNodeByRole(turn, role);
-      const markdown = role === "assistant" ? getMarkdownNode(turn) : null;
+      const markdowns = role === "assistant" ? getMarkdownNodes(turn) : [];
+      const html = getMarkdownHtml(markdowns);
       return {
         index,
         turn,
@@ -883,8 +927,8 @@
         turnId: getTurnId(turn),
         messageId: message ? message.getAttribute("data-message-id") || "" : "",
         text: getTurnText(turn),
-        html: markdown ? getSanitizedHtml(markdown) : "",
-        contentFormat: markdown ? "html" : "text"
+        html,
+        contentFormat: html ? "html" : "text"
       };
     }).filter((record) => record.role && record.turn);
   }
@@ -927,9 +971,9 @@
   function getAssistantMessageRecords() {
     return getAssistantTurns().map((turn, index) => {
       const message = getMessageNode(turn);
-      const markdown = getMarkdownNode(turn);
-      const text = markdown ? getReadableText(markdown).trim() : "";
-      const html = markdown ? getSanitizedHtml(markdown) : "";
+      const markdowns = getMarkdownNodes(turn);
+      const text = getMarkdownText(markdowns);
+      const html = getMarkdownHtml(markdowns);
       return {
         index,
         turn,

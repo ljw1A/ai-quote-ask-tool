@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.5-runtime-route-gate";
+  const CONTENT_VERSION = "0.7.6-chatgpt-segmented-markdown";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -433,6 +433,7 @@
         sourceMessageId,
         startOffset: selection.startOffset,
         endOffset: selection.endOffset,
+        markdownIndex: Number.isInteger(selection.markdownIndex) ? selection.markdownIndex : 0,
         exactText: quoteText,
         prefixText: selection.prefixText || "",
         suffixText: selection.suffixText || "",
