@@ -56,6 +56,7 @@ The popup opens the standalone local management page. It does not toggle the in-
   - delete action.
 - The native page composer is visually hidden while a panel is open, so the user naturally works through the panel.
 - During a panel-sent response, a shared input blocker prevents accidental typing into the provider composer.
+- Opening a follow-up panel locks the current page scroll position. Closing an unsent panel unlocks it; sent follow-ups keep the lock until response capture finishes.
 - The panel input is fixed-size, auto-wraps text, and scrolls after its maximum height.
 - Assistant messages render sanitized HTML when the provider's page DOM exposes Markdown-derived HTML.
 - Each assistant message has a small icon-only refresh button with the title `重新获取回复`.
@@ -65,6 +66,7 @@ The popup opens the standalone local management page. It does not toggle the in-
 - The extension does not call OpenAI, Google, or any model API directly.
 - Follow-up questions are sent through the provider's normal web composer.
 - The generated prompt includes the selected quote and the user's question as context.
+- The generated prompt treats panel questions as temporary side questions. It tells the provider to use the current quote when the user is clearly asking about it, and otherwise to prefer the main conversation body over earlier quote-marked side questions.
 - Plugin-generated main-chat prompts and model replies are hidden from the main page while the quote thread exists.
 - The latest active thread reply is kept hidden, not unloaded, while the panel is open so the refresh button can re-read it from the page DOM.
 - When the panel is closed after a reply has been captured, hidden main-chat DOM can be unloaded to reduce page cost.

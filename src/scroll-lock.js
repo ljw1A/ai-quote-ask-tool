@@ -24,9 +24,26 @@
     let relockTimer = 0;
     const getTarget = typeof options.getTarget === "function" ? options.getTarget : getDefaultTarget;
 
-    function lock() {
+    function lock(options = {}) {
+      const nextTarget = resolveTarget();
+      if (active && nextTarget === scrollTarget) {
+        if (options.resetPosition) {
+          if (relockTimer) {
+            clearTimeout(relockTimer);
+            relockTimer = 0;
+          }
+          const position = getPosition(scrollTarget);
+          lockedLeft = position.left;
+          lockedTop = position.top;
+          userScrolling = false;
+          return;
+        }
+        restoreLockedPosition();
+        return;
+      }
+
       unlock();
-      scrollTarget = resolveTarget();
+      scrollTarget = nextTarget;
       active = true;
       userScrolling = false;
       const position = getPosition(scrollTarget);

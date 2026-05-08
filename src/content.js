@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.10-block-reference-menu";
+  const CONTENT_VERSION = "0.7.11-panel-scroll-lock";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -529,6 +529,7 @@
     }
 
     state.activeThreadId = threadId;
+    lockPendingScroll({ resetPosition: true });
     provider.setActiveMark(threadId);
     sidebar.render(thread);
     sidebar.focusInput();
@@ -565,6 +566,7 @@
     provider.setActiveMark("");
     sidebar.render(null);
     syncPageDecorations();
+    unlockPanelScrollIfIdle();
   }
 
   function discardEmptyActiveThread() {
@@ -638,7 +640,9 @@
     const lines = [
       `围绕 提问 ${thread.displayIndex} 的批注提问`,
       "",
-      "你正在回答用户围绕某段引用的追问。请只回答用户问题，不要复述这段系统说明。",
+      "这是一个临时追问，通常独立于主线对话。请只回答用户问题，不要复述这段系统说明。",
+      "如果当前问题明确围绕本次 <quote> 引用提问，可以参考前文、前面的回答以及正文上下文来解释这段引用。",
+      "如果当前问题没有明确围绕本次 <quote> 引用提问，请优先参考前面的正文和主线内容，通常忽略此前其它带引用标记的临时提问。",
       "请不要在回答中提及或输出追踪标记。",
     ];
     if (styleInstruction) {
@@ -709,7 +713,7 @@
     const question = (rawQuestion || "").trim();
     const thread = getThread(state.activeThreadId);
     if (!thread || !question) {
-      unlockPendingScroll();
+      unlockPanelScrollIfIdle();
       return;
     }
     if (state.pendingResponse || hasGeneratingMessage(thread)) {
@@ -717,7 +721,7 @@
       renderSavedThread(thread);
       sidebar.focusInput();
       if (!state.pendingResponse) {
-        unlockPendingScroll();
+        unlockPanelScrollIfIdle();
       }
       return;
     }
@@ -761,15 +765,21 @@
     }
   }
 
-  function lockPendingScroll() {
+  function lockPendingScroll(options = {}) {
     if (pendingScrollLock) {
-      pendingScrollLock.lock();
+      pendingScrollLock.lock(options);
     }
   }
 
   function unlockPendingScroll() {
     if (pendingScrollLock) {
       pendingScrollLock.unlock();
+    }
+  }
+
+  function unlockPanelScrollIfIdle() {
+    if (!state.activeThreadId && !state.pendingResponse) {
+      unlockPendingScroll();
     }
   }
 
