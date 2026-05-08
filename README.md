@@ -66,7 +66,7 @@ The popup opens the standalone local management page. It does not toggle the in-
 - The extension does not call OpenAI, Google, or any model API directly.
 - Follow-up questions are sent through the provider's normal web composer.
 - The generated prompt includes the selected quote and the user's question as context.
-- The generated prompt treats panel questions as temporary side questions. It tells the provider to use the current quote when the user is clearly asking about it, and otherwise to prefer the main conversation body over earlier quote-marked side questions.
+- The generated prompt treats panel questions as isolated annotation side questions. It asks the provider to answer from the current quote and user question, only lightly using surrounding main text when necessary, and to ignore earlier quote-marked side questions.
 - Plugin-generated main-chat prompts and model replies are hidden from the main page while the quote thread exists.
 - The latest active thread reply is kept hidden, not unloaded, while the panel is open so the refresh button can re-read it from the page DOM.
 - When the panel is closed after a reply has been captured, hidden main-chat DOM can be unloaded to reduce page cost.
