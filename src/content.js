@@ -533,7 +533,7 @@
     provider.setActiveMark(threadId);
     sidebar.render(thread);
     sidebar.focusInput();
-    syncPageDecorations();
+    syncPanelDecorations();
   }
 
   function handleQuoteMarkClick(event) {
@@ -561,11 +561,21 @@
   }
 
   function closeSidebar() {
+    const activeThread = getThread(state.activeThreadId);
+    const shouldSyncMainChatAfterClose = Boolean(
+      activeThread
+      && hasThreadStarted(activeThread)
+      && !state.loadingConversation
+    );
+
     discardEmptyActiveThread();
     state.activeThreadId = "";
     provider.setActiveMark("");
     sidebar.render(null);
-    syncPageDecorations();
+    syncPanelDecorations();
+    if (shouldSyncMainChatAfterClose) {
+      syncMainChatVisibility(getMainChatHideTargets());
+    }
     unlockPanelScrollIfIdle();
   }
 
@@ -827,11 +837,16 @@
     return targets;
   }
 
-  function syncMainChatVisibility(targets = getMainChatHideTargets()) {
+  function syncMainChatVisibility(targets) {
     if (!provider.syncHiddenMainTurns) {
       return;
     }
-    provider.syncHiddenMainTurns(targets);
+    const hasExplicitTargets = Array.isArray(targets);
+    const resolvedTargets = hasExplicitTargets ? targets : getMainChatHideTargets();
+    if (!hasExplicitTargets && resolvedTargets.length === 0) {
+      return;
+    }
+    provider.syncHiddenMainTurns(resolvedTargets);
   }
 
   function syncMainComposerVisibility() {
@@ -861,6 +876,10 @@
 
   function syncPageDecorations() {
     syncMainChatVisibility();
+    syncPanelDecorations();
+  }
+
+  function syncPanelDecorations() {
     syncMainComposerVisibility();
     syncNativeGenerationControlsVisibility();
     syncProviderPendingResponseState();
@@ -964,7 +983,7 @@
       await completeProviderPendingResponse(completedResponse);
       state.pendingResponse = null;
       unlockPendingScroll();
-      syncPageDecorations();
+      syncPanelDecorations();
     }, RESPONSE_STABLE_DELAY_MS);
   }
 
@@ -1206,7 +1225,7 @@
       clearPendingStableTimer();
     }
     await CGQAStorage.deleteThread(getConversationRef(), threadId);
-    syncMainChatVisibility();
+    syncMainChatVisibility(getMainChatHideTargets());
     closeSidebar();
     scheduleRestoreBurst();
   }
