@@ -1202,6 +1202,24 @@
     });
   }
 
+  function syncKnownHiddenMainTurns(targets) {
+    const targetByPromptToken = new Map(normalizeHiddenTargets(targets).map((target) => {
+      return [target.promptToken, target];
+    }));
+
+    document.querySelectorAll(`.${HIDDEN_TURN_CLASS}`).forEach((turn) => {
+      const target = targetByPromptToken.get(turn.dataset.cgqaHiddenPromptToken || "");
+      if (!target) {
+        return;
+      }
+      if (target.unload) {
+        removeMainTurn(turn);
+        return;
+      }
+      hideMainTurn(turn, target);
+    });
+  }
+
   function normalizeHiddenTargets(targets) {
     const seen = new Set();
     return (Array.isArray(targets) ? targets : []).map((target) => {
@@ -1718,6 +1736,7 @@
     getAllTurnRecords,
     getAssistantMessageRecords,
     syncHiddenMainTurns,
+    syncKnownHiddenMainTurns,
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
     syncPendingResponseState,

@@ -561,11 +561,21 @@
   }
 
   function closeSidebar() {
+    const activeThread = getThread(state.activeThreadId);
+    const shouldSyncKnownMainChatAfterClose = Boolean(
+      activeThread
+      && hasThreadStarted(activeThread)
+      && !state.loadingConversation
+    );
+
     discardEmptyActiveThread();
     state.activeThreadId = "";
     provider.setActiveMark("");
     sidebar.render(null);
     syncPanelDecorations();
+    if (shouldSyncKnownMainChatAfterClose) {
+      syncKnownMainChatVisibility(getMainChatHideTargets());
+    }
     unlockPanelScrollIfIdle();
   }
 
@@ -837,6 +847,13 @@
       return;
     }
     provider.syncHiddenMainTurns(resolvedTargets);
+  }
+
+  function syncKnownMainChatVisibility(targets) {
+    if (!provider.syncKnownHiddenMainTurns) {
+      return;
+    }
+    provider.syncKnownHiddenMainTurns(Array.isArray(targets) ? targets : getMainChatHideTargets());
   }
 
   function syncMainComposerVisibility() {

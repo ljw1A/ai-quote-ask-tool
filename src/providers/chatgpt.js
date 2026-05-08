@@ -61,6 +61,7 @@
       getAllTurnRecords: CGQAChatGPTDom.getAllTurnRecords,
       getAssistantMessageRecords: CGQAChatGPTDom.getAssistantMessageRecords,
       syncHiddenMainTurns: CGQAChatGPTDom.syncHiddenMainTurns,
+      syncKnownHiddenMainTurns: CGQAChatGPTDom.syncKnownHiddenMainTurns,
       setMainComposerHidden: CGQAChatGPTDom.setMainComposerHidden,
       setNativeGenerationControlsHidden: CGQAChatGPTDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQAChatGPTDom.syncPendingResponseState,

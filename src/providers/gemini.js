@@ -59,6 +59,7 @@
       getAllTurnRecords: CGQAGeminiDom.getAllTurnRecords,
       getAssistantMessageRecords: CGQAGeminiDom.getAssistantMessageRecords,
       syncHiddenMainTurns: CGQAGeminiDom.syncHiddenMainTurns,
+      syncKnownHiddenMainTurns: CGQAGeminiDom.syncKnownHiddenMainTurns,
       setMainComposerHidden: CGQAGeminiDom.setMainComposerHidden,
       setNativeGenerationControlsHidden: CGQAGeminiDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQAGeminiDom.syncPendingResponseState,
