@@ -13,7 +13,7 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://gemini.google.com/app/*"
+        "https://gemini.google.com/*"
       ],
       "js": [
         "src/theme.js",
