@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.11-panel-scroll-lock";
+  const CONTENT_VERSION = "0.7.12-provider-toggles";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -58,6 +58,7 @@
 
   async function init() {
     bindNavigationEvents();
+    bindSettingsEvents();
     await reconcileLocation();
   }
 
@@ -85,7 +86,6 @@
 
     await loadThreads();
     bindEvents();
-    bindSettingsEvents();
     provider.clearRenderedMarks();
     scheduleRestoreBurst();
     syncPageDecorations();
@@ -192,12 +192,23 @@
       if (areaName !== "local" || !changes["cgqa:settings:v1"]) {
         return;
       }
-      loadTheme().then(applyTheme).catch((error) => {
-        console.error("[CGQA] apply changed theme failed", error);
+      if (state.active) {
+        loadTheme().then(applyTheme).catch((error) => {
+          console.error("[CGQA] apply changed theme failed", error);
+        });
+        loadReplyStyle().then((replyStyle) => {
+          state.replyStyle = replyStyle;
+          sidebar && sidebar.render(getThread(state.activeThreadId) || null);
+        }).catch((error) => {
+          console.error("[CGQA] apply changed reply style failed", error);
+        });
+      }
+      reconcileLocation().catch((error) => {
+        console.error("[CGQA] reconcile provider setting failed", error);
       });
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
-    state.activeCleanupTasks.push(() => chrome.storage.onChanged.removeListener(handleStorageChange));
+    state.cleanupTasks.push(() => chrome.storage.onChanged.removeListener(handleStorageChange));
   }
 
   function addRuntimeEvent(target, type, handler, options) {
@@ -259,9 +270,12 @@
     }
 
     const nextProvider = getPageProvider();
-    if (!nextProvider) {
+    const providerEnabled = nextProvider ? await isProviderEnabled(nextProvider.id) : false;
+    if (!nextProvider || !providerEnabled) {
       if (state.active) {
         deactivateProvider();
+      } else {
+        delete globalThis.CGQAProvider;
       }
       return;
     }
@@ -282,6 +296,18 @@
     const nextConversationId = provider.getConversationId();
     if (nextConversationId !== state.conversationId) {
       await switchConversation();
+    }
+  }
+
+  async function isProviderEnabled(providerId) {
+    if (!CGQAStorage || typeof CGQAStorage.isProviderEnabled !== "function") {
+      return true;
+    }
+    try {
+      return await CGQAStorage.isProviderEnabled(providerId);
+    } catch (error) {
+      console.error("[CGQA] load provider setting failed", error);
+      return true;
     }
   }
 

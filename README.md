@@ -29,6 +29,7 @@ Clicking the extension icon opens a small popup:
 - `打开提问管理`
 
 The popup opens the standalone local management page. It does not toggle the in-page panel.
+It also provides per-provider switches for ChatGPT, Gemini, and DeepSeek. A provider only activates on its supported pages when its switch is enabled. DeepSeek is marked as beta because its page DOM is less stable around formulas.
 
 ## Core Features
 
@@ -130,6 +131,7 @@ The extension also stores a global theme key. Current themes:
 - slate
 
 The active theme drives quote marks, chips, panel focus states, popup controls, and the management page.
+Provider switches are stored in the same local settings object. ChatGPT and Gemini are enabled by default; DeepSeek is disabled by default because its formula DOM can crash when touched by extensions.
 
 ## Local Storage And Management Page
 

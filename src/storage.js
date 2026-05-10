@@ -9,6 +9,12 @@
   const REPLY_STYLE_MODES = new Set(["default", "longer", "shorter", "custom"]);
   const THEME_MODES = new Set(["green", "pink", "blue", "gold", "slate"]);
   const DEFAULT_THEME = "green";
+  const PROVIDER_IDS = ["chatgpt", "gemini", "deepseek"];
+  const DEFAULT_PROVIDER_ENABLED = {
+    chatgpt: true,
+    gemini: true,
+    deepseek: false
+  };
 
   function normalizeConversationRef(ref) {
     if (ref && typeof ref === "object") {
@@ -403,8 +409,20 @@
         mode,
         customPrompt
       },
-      theme: normalizeTheme(settings && settings.theme)
+      theme: normalizeTheme(settings && settings.theme),
+      providers: normalizeProviderSettings(settings && settings.providers)
     };
+  }
+
+  function normalizeProviderSettings(providers) {
+    const normalized = {};
+    PROVIDER_IDS.forEach((providerId) => {
+      const value = providers && Object.prototype.hasOwnProperty.call(providers, providerId)
+        ? providers[providerId]
+        : DEFAULT_PROVIDER_ENABLED[providerId];
+      normalized[providerId] = Boolean(value);
+    });
+    return normalized;
   }
 
   async function getSettings() {
@@ -454,6 +472,27 @@
     return saved.theme;
   }
 
+  async function getProviderSettings() {
+    return (await getSettings()).providers;
+  }
+
+  async function saveProviderSettings(providers) {
+    const current = await getSettings();
+    const saved = await saveSettings({
+      ...current,
+      providers: {
+        ...current.providers,
+        ...providers
+      }
+    });
+    return saved.providers;
+  }
+
+  async function isProviderEnabled(providerId) {
+    const providers = await getProviderSettings();
+    return Boolean(providers && providers[providerId]);
+  }
+
   globalThis.CGQAStorage = {
     listConversations,
     getConversation,
@@ -467,6 +506,9 @@
     getReplyStyleSettings,
     saveReplyStyleSettings,
     getThemeSettings,
-    saveThemeSettings
+    saveThemeSettings,
+    getProviderSettings,
+    saveProviderSettings,
+    isProviderEnabled
   };
 })();
