@@ -63,6 +63,7 @@
       setMainComposerHidden: CGQADeepSeekDom.setMainComposerHidden,
       setNativeGenerationControlsHidden: CGQADeepSeekDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQADeepSeekDom.syncPendingResponseState,
+      isResponseGenerating: CGQADeepSeekDom.isResponseGenerating,
       completePendingResponse: CGQADeepSeekDom.completePendingResponse,
       getScrollContainer: CGQADeepSeekDom.getScrollContainer,
       submitPrompt: CGQADeepSeekDom.submitPrompt

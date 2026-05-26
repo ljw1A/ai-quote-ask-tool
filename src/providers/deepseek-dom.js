@@ -1274,6 +1274,10 @@
     setThinkingControlsHidden(active);
   }
 
+  function isResponseGenerating() {
+    return Boolean(findStopButton());
+  }
+
   function setThinkingControlsHidden(hidden) {
     document.querySelectorAll(THINKING_CONTROL_SELECTOR).forEach((node) => {
       if (node.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast")) {
@@ -1397,17 +1401,8 @@
 
   async function completePendingResponse() {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    clickResidualStopButton();
     clearPromptText();
     blurActiveElement();
-  }
-
-  function clickResidualStopButton() {
-    const button = findStopButton();
-    if (!button) {
-      return;
-    }
-    clickElement(button);
   }
 
   function findStopButton() {
@@ -1533,6 +1528,7 @@
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
+    isResponseGenerating,
     completePendingResponse,
     getScrollContainer,
     submitPrompt

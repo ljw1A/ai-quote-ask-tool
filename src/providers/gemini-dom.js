@@ -1152,6 +1152,10 @@
     inputBlocker.setBlocked(Boolean(state && state.active));
   }
 
+  function isResponseGenerating() {
+    return Boolean(findStopButton());
+  }
+
   function getNodeControlText(node) {
     return [
       node.getAttribute("aria-label") || "",
@@ -1251,17 +1255,8 @@
 
   async function completePendingResponse() {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    clickResidualStopButton();
     clearPromptText();
     blurActiveElement();
-  }
-
-  function clickResidualStopButton() {
-    const button = findStopButton();
-    if (!button) {
-      return;
-    }
-    clickElement(button);
   }
 
   function findStopButton() {
@@ -1394,6 +1389,7 @@
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
+    isResponseGenerating,
     completePendingResponse,
     getScrollContainer,
     submitPrompt

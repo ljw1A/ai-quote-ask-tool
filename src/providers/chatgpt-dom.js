@@ -1393,6 +1393,10 @@
     inputBlocker.setBlocked(Boolean(state && state.active));
   }
 
+  function isResponseGenerating() {
+    return getNativeGenerationControlCandidates().length > 0;
+  }
+
   function getNativeGenerationControlCandidates() {
     const nodes = Array.from(document.querySelectorAll([
       "button",
@@ -1740,6 +1744,7 @@
     setMainComposerHidden,
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
+    isResponseGenerating,
     getScrollContainer,
     submitPrompt
   };

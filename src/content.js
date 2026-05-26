@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.12-provider-toggles";
+  const CONTENT_VERSION = "0.7.13-streaming-panel";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -26,6 +26,8 @@
     pendingCaptureTimer: 0,
     pendingCaptureMutationTimer: 0,
     pendingStableTimer: 0,
+    pendingStreamSaveTimer: 0,
+    pendingStreamSaveThreadId: "",
     active: false,
     creatingThread: false,
     loadingConversation: false,
@@ -41,6 +43,7 @@
 
   const RESPONSE_STABLE_DELAY_MS = 1400;
   const RESPONSE_TIMEOUT_MS = 120000;
+  const STREAM_SAVE_DELAY_MS = 2000;
   const RESTORE_DELAYS_MS = [250, 1000, 2500, 5000];
   const LOCATION_CHECK_DELAYS_MS = [0, 250, 1000];
   const PROMPT_TOKEN_PREFIX = "CGQA_PROMPT";
@@ -371,6 +374,7 @@
     stopPendingCaptureWatcher();
     unlockPendingScroll();
     clearPendingStableTimer();
+    clearPendingStreamSaveTimer();
   }
 
   function handleMouseUp(event) {
@@ -794,6 +798,7 @@
       stopPendingCaptureWatcher();
       unlockPendingScroll();
       clearPendingStableTimer();
+      clearPendingStreamSaveTimer();
       assistantMessage.content = error.message || "发送失败。";
       assistantMessage.status = "failed";
       await saveAndRenderThread(thread);
@@ -944,6 +949,7 @@
       stopPendingCaptureWatcher();
       unlockPendingScroll();
       clearPendingStableTimer();
+      clearPendingStreamSaveTimer();
       return;
     }
 
@@ -955,6 +961,7 @@
       stopPendingCaptureWatcher();
       unlockPendingScroll();
       clearPendingStableTimer();
+      clearPendingStreamSaveTimer();
       return;
     }
 
@@ -965,6 +972,7 @@
       stopPendingCaptureWatcher();
       unlockPendingScroll();
       clearPendingStableTimer();
+      clearPendingStreamSaveTimer();
       saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
         console.error("[CGQA] save timeout state failed", error);
       });
@@ -976,7 +984,38 @@
       return;
     }
 
+    updateStreamingAssistantMessage(thread, generating, candidate);
     scheduleStableCandidateCapture(thread, generating, candidate);
+  }
+
+  function updateStreamingAssistantMessage(thread, generating, candidate) {
+    if (!thread || !generating || !candidate || !candidate.text) {
+      return;
+    }
+
+    const text = candidate.text;
+    const html = candidate.html || "";
+    const contentFormat = html ? "html" : "text";
+    if (
+      text === thread.quoteText
+      || (
+        generating.content === text
+        && (generating.html || "") === html
+        && generating.contentFormat === contentFormat
+      )
+    ) {
+      return;
+    }
+
+    generating.content = text;
+    generating.html = html;
+    generating.contentFormat = contentFormat;
+    thread.updatedAt = Date.now();
+
+    if (thread.threadId === state.activeThreadId && sidebar) {
+      sidebar.render(thread);
+    }
+    queueStreamingSave(thread);
   }
 
   function scheduleStableCandidateCapture(thread, generating, candidate) {
@@ -986,14 +1025,16 @@
       return;
     }
 
+    const candidateHtml = candidate.html || "";
     const sameCandidate = pending.candidate
       && pending.candidate.signature === signature
-      && pending.candidate.text === candidate.text;
+      && pending.candidate.text === candidate.text
+      && (pending.candidate.html || "") === candidateHtml;
     if (sameCandidate && state.pendingStableTimer) {
       return;
     }
 
-    pending.candidate = { signature, text: candidate.text };
+    pending.candidate = { signature, text: candidate.text, html: candidateHtml };
     clearPendingStableTimer();
     state.pendingStableTimer = setTimeout(async () => {
       state.pendingStableTimer = 0;
@@ -1003,7 +1044,10 @@
 
       const latest = findAssistantRecordBySignature(signature) || findPendingAssistantCandidate(thread);
       const text = latest ? latest.text : candidate.text;
-      if (!text || text === generating.content || text === thread.quoteText) {
+      if (!text || text === thread.quoteText) {
+        return;
+      }
+      if (isProviderResponseStillGenerating()) {
         return;
       }
       generating.content = text;
@@ -1012,12 +1056,55 @@
       generating.status = "completed";
       const completedResponse = state.pendingResponse;
       stopPendingCaptureWatcher();
+      clearPendingStreamSaveTimer();
       await saveAndRenderThread(thread);
       await completeProviderPendingResponse(completedResponse);
       state.pendingResponse = null;
       unlockPendingScroll();
       syncPanelDecorations();
     }, RESPONSE_STABLE_DELAY_MS);
+  }
+
+  function isProviderResponseStillGenerating() {
+    if (!provider || typeof provider.isResponseGenerating !== "function") {
+      return false;
+    }
+    try {
+      return Boolean(provider.isResponseGenerating());
+    } catch (error) {
+      console.warn("[CGQA] provider generation state check failed", error);
+      return false;
+    }
+  }
+
+  function queueStreamingSave(thread) {
+    if (!thread || !thread.threadId) {
+      return;
+    }
+    state.pendingStreamSaveThreadId = thread.threadId;
+    if (state.pendingStreamSaveTimer) {
+      return;
+    }
+
+    state.pendingStreamSaveTimer = setTimeout(async () => {
+      const threadId = state.pendingStreamSaveThreadId;
+      state.pendingStreamSaveTimer = 0;
+      state.pendingStreamSaveThreadId = "";
+      const latestThread = getThread(threadId);
+      if (!latestThread || !hasGeneratingMessage(latestThread)) {
+        return;
+      }
+
+      try {
+        const savedThread = await CGQAStorage.saveThread(latestThread, getConversationMeta());
+        replaceThread(savedThread);
+        if (savedThread.threadId === state.activeThreadId && sidebar) {
+          sidebar.render(savedThread);
+        }
+      } catch (error) {
+        console.error("[CGQA] save streaming response failed", error);
+      }
+    }, STREAM_SAVE_DELAY_MS);
   }
 
   async function completeProviderPendingResponse(responseTracker) {
@@ -1094,6 +1181,14 @@
     }
     clearTimeout(state.pendingStableTimer);
     state.pendingStableTimer = 0;
+  }
+
+  function clearPendingStreamSaveTimer() {
+    if (state.pendingStreamSaveTimer) {
+      clearTimeout(state.pendingStreamSaveTimer);
+      state.pendingStreamSaveTimer = 0;
+    }
+    state.pendingStreamSaveThreadId = "";
   }
 
   function findChangedAssistantRecord(thread, records, baselineTextBySignature) {

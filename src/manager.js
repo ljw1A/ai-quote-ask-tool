@@ -224,7 +224,6 @@
     if (
       !message
       || message.role !== "assistant"
-      || message.status !== "completed"
       || message.contentFormat !== "html"
       || !message.html
       || !globalThis.CGQASanitize
