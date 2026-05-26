@@ -30,6 +30,7 @@ Clicking the extension icon opens a small popup:
 
 The popup opens the standalone local management page. It does not toggle the in-page panel.
 It also provides per-provider switches for ChatGPT, Gemini, and DeepSeek. A provider only activates on its supported pages when its switch is enabled. DeepSeek is marked as beta because its page DOM is less stable around formulas.
+The popup also includes `整理当前页面`, which asks the active supported tab to retry quote mark restoration and hide/unload plugin-generated temporary main-chat messages. The question-mark icon next to it explains the command in-place.
 
 ## Core Features
 
@@ -78,6 +79,7 @@ It also provides per-provider switches for ChatGPT, Gemini, and DeepSeek. A prov
 - If a reply is still pending, the latest hidden DOM is kept until capture completes.
 - The manual refresh button re-extracts the corresponding assistant reply from the provider page DOM and updates the saved sidebar message when newer or fuller content is available.
 - The refresh button does not resend the question.
+- The popup `整理当前页面` command is a manual recovery path for occasional provider/plugin timing conflicts where quote marks or hidden temporary messages are not restored correctly.
 
 ## Provider-specific Behavior
 

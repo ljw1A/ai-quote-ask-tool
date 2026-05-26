@@ -3,7 +3,7 @@
   "name": "AI Quote Annotation",
   "version": "0.3.2",
   "description": "Add lightweight quote annotation threads to supported AI conversations.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "action": {
     "default_title": "AI 提问助手",
     "default_popup": "popup.html"

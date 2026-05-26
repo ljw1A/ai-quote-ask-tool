@@ -23,9 +23,33 @@
         <path d="M9 7h8v8"></path>
       </svg>
     </button>
+    <div class="popup-command-row">
+      <button id="repair-page" class="popup-action popup-action-secondary" type="button">
+        <span>整理当前页面</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 12a9 9 0 0 1 14.7-7"></path>
+          <path d="M17 4v5h-5"></path>
+          <path d="M21 12a9 9 0 0 1-14.7 7"></path>
+          <path d="M7 20v-5h5"></path>
+        </svg>
+      </button>
+      <span id="repair-help" class="popup-help popup-command-help" title="尝试恢复引用标记，并隐藏或卸载插件发送到主对话里的临时问答。"></span>
+    </div>
+    <div id="repair-status" class="popup-status" role="status" aria-live="polite"></div>
     <section class="popup-provider-card" aria-labelledby="provider-title">
       <div class="popup-section-title" id="provider-title">启用页面</div>
       <div id="provider-list" class="popup-provider-list"></div>
+    </section>
+    <section class="popup-option-card" aria-labelledby="compatibility-title">
+      <div class="popup-section-title" id="compatibility-title">兼容选项</div>
+      <label class="popup-option-row">
+        <span class="popup-option-text">
+          <span class="popup-option-name">发送时保留原生界面</span>
+          <span id="send-visibility-help" class="popup-help" title="页面状态异常时可尝试开启, 此选项会降低视觉体验"></span>
+        </span>
+        <input id="send-visibility-toggle" type="checkbox" aria-label="发送时保留原生界面">
+        <span class="popup-switch" aria-hidden="true"><span></span></span>
+      </label>
     </section>
     <label class="popup-theme">
       <span>主题色</span>

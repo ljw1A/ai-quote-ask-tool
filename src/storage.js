@@ -15,6 +15,9 @@
     gemini: true,
     deepseek: false
   };
+  const DEFAULT_COMPATIBILITY_SETTINGS = {
+    keepProviderUiVisibleDuringSend: false
+  };
 
   function normalizeConversationRef(ref) {
     if (ref && typeof ref === "object") {
@@ -410,7 +413,8 @@
         customPrompt
       },
       theme: normalizeTheme(settings && settings.theme),
-      providers: normalizeProviderSettings(settings && settings.providers)
+      providers: normalizeProviderSettings(settings && settings.providers),
+      compatibility: normalizeCompatibilitySettings(settings && settings.compatibility)
     };
   }
 
@@ -423,6 +427,14 @@
       normalized[providerId] = Boolean(value);
     });
     return normalized;
+  }
+
+  function normalizeCompatibilitySettings(compatibility) {
+    return {
+      keepProviderUiVisibleDuringSend: compatibility && Object.prototype.hasOwnProperty.call(compatibility, "keepProviderUiVisibleDuringSend")
+        ? Boolean(compatibility.keepProviderUiVisibleDuringSend)
+        : DEFAULT_COMPATIBILITY_SETTINGS.keepProviderUiVisibleDuringSend
+    };
   }
 
   async function getSettings() {
@@ -493,6 +505,22 @@
     return Boolean(providers && providers[providerId]);
   }
 
+  async function getCompatibilitySettings() {
+    return (await getSettings()).compatibility;
+  }
+
+  async function saveCompatibilitySettings(compatibility) {
+    const current = await getSettings();
+    const saved = await saveSettings({
+      ...current,
+      compatibility: {
+        ...current.compatibility,
+        ...compatibility
+      }
+    });
+    return saved.compatibility;
+  }
+
   globalThis.CGQAStorage = {
     listConversations,
     getConversation,
@@ -509,6 +537,8 @@
     saveThemeSettings,
     getProviderSettings,
     saveProviderSettings,
-    isProviderEnabled
+    isProviderEnabled,
+    getCompatibilitySettings,
+    saveCompatibilitySettings
   };
 })();

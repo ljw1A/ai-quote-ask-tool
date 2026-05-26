@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.13-streaming-panel";
+  const CONTENT_VERSION = "0.7.15-streaming-send-visibility";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -36,6 +36,9 @@
       mode: "default",
       customPrompt: ""
     },
+    compatibility: {
+      keepProviderUiVisibleDuringSend: false
+    },
     theme: "green",
     cleanupTasks: [],
     activeCleanupTasks: []
@@ -60,6 +63,7 @@
   }
 
   async function init() {
+    bindRuntimeMessages();
     bindNavigationEvents();
     bindSettingsEvents();
     await reconcileLocation();
@@ -74,6 +78,7 @@
     });
     syncProviderState();
     state.replyStyle = await loadReplyStyle();
+    state.compatibility = await loadCompatibilitySettings();
     state.theme = await loadTheme();
     applyTheme(state.theme);
     sidebar = CGQASidebar.buildSidebar({
@@ -122,6 +127,18 @@
     } catch (error) {
       console.error("[CGQA] load theme failed", error);
       return "green";
+    }
+  }
+
+  async function loadCompatibilitySettings() {
+    if (!CGQAStorage || typeof CGQAStorage.getCompatibilitySettings !== "function") {
+      return normalizeCompatibilitySettings(null);
+    }
+    try {
+      return normalizeCompatibilitySettings(await CGQAStorage.getCompatibilitySettings());
+    } catch (error) {
+      console.error("[CGQA] load compatibility settings failed", error);
+      return normalizeCompatibilitySettings(null);
     }
   }
 
@@ -205,6 +222,11 @@
         }).catch((error) => {
           console.error("[CGQA] apply changed reply style failed", error);
         });
+        loadCompatibilitySettings().then((compatibility) => {
+          state.compatibility = compatibility;
+        }).catch((error) => {
+          console.error("[CGQA] apply changed compatibility settings failed", error);
+        });
       }
       reconcileLocation().catch((error) => {
         console.error("[CGQA] reconcile provider setting failed", error);
@@ -212,6 +234,27 @@
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
     state.cleanupTasks.push(() => chrome.storage.onChanged.removeListener(handleStorageChange));
+  }
+
+  function bindRuntimeMessages() {
+    if (!chrome.runtime || !chrome.runtime.onMessage) {
+      return;
+    }
+
+    const handleMessage = (message, _sender, sendResponse) => {
+      if (!message || message.type !== "CGQA_REPAIR_PAGE") {
+        return false;
+      }
+      repairCurrentPage().then(sendResponse).catch((error) => {
+        sendResponse({
+          ok: false,
+          message: error && error.message || "整理当前页面失败。"
+        });
+      });
+      return true;
+    };
+    chrome.runtime.onMessage.addListener(handleMessage);
+    state.cleanupTasks.push(() => chrome.runtime.onMessage.removeListener(handleMessage));
   }
 
   function addRuntimeEvent(target, type, handler, options) {
@@ -750,6 +793,12 @@
     return ["green", "pink", "blue", "gold", "slate"].includes(theme) ? theme : "green";
   }
 
+  function normalizeCompatibilitySettings(compatibility) {
+    return {
+      keepProviderUiVisibleDuringSend: Boolean(compatibility && compatibility.keepProviderUiVisibleDuringSend)
+    };
+  }
+
   async function sendQuestion(rawQuestion) {
     const question = (rawQuestion || "").trim();
     const thread = getThread(state.activeThreadId);
@@ -785,6 +834,9 @@
     };
     thread.messages.push(userMessage, assistantMessage);
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
+    if (shouldKeepProviderUiVisibleDuringSend()) {
+      syncPanelDecorations();
+    }
     lockPendingScroll();
 
     try {
@@ -803,6 +855,7 @@
       assistantMessage.status = "failed";
       await saveAndRenderThread(thread);
       syncPageDecorations();
+      syncPanelDecorations();
       CGQASidebar.showToast(assistantMessage.content);
     }
   }
@@ -873,11 +926,22 @@
       return;
     }
     const hasExplicitTargets = Array.isArray(targets);
+    if (!hasExplicitTargets && shouldKeepProviderUiVisibleDuringSend()) {
+      return;
+    }
     const resolvedTargets = hasExplicitTargets ? targets : getMainChatHideTargets();
     if (!hasExplicitTargets && resolvedTargets.length === 0) {
       return;
     }
     provider.syncHiddenMainTurns(resolvedTargets);
+  }
+
+  function shouldKeepProviderUiVisibleDuringSend() {
+    return Boolean(
+      state.pendingResponse
+      && state.compatibility
+      && state.compatibility.keepProviderUiVisibleDuringSend
+    );
   }
 
   function syncKnownMainChatVisibility(targets) {
@@ -889,6 +953,10 @@
 
   function syncMainComposerVisibility() {
     if (!provider.setMainComposerHidden) {
+      return;
+    }
+    if (shouldKeepProviderUiVisibleDuringSend()) {
+      provider.setMainComposerHidden(false);
       return;
     }
     provider.setMainComposerHidden(Boolean(state.activeThreadId));
@@ -915,6 +983,27 @@
   function syncPageDecorations() {
     syncMainChatVisibility();
     syncPanelDecorations();
+  }
+
+  async function repairCurrentPage() {
+    await reconcileLocation();
+    if (!state.active || !provider) {
+      return {
+        ok: false,
+        message: "当前页面未启用提问助手。"
+      };
+    }
+
+    const targets = getMainChatHideTargets();
+    syncMainChatVisibility(targets);
+    syncKnownMainChatVisibility(targets);
+    restorePersistedMarks();
+    scheduleRestoreBurst();
+    syncPageDecorations();
+    return {
+      ok: true,
+      message: `已整理当前页面：${state.threads.length} 个提问，${targets.length} 条临时消息。`
+    };
   }
 
   function syncPanelDecorations() {
@@ -950,6 +1039,7 @@
       unlockPendingScroll();
       clearPendingStableTimer();
       clearPendingStreamSaveTimer();
+      syncPanelDecorations();
       return;
     }
 
@@ -962,6 +1052,7 @@
       unlockPendingScroll();
       clearPendingStableTimer();
       clearPendingStreamSaveTimer();
+      syncPanelDecorations();
       return;
     }
 
@@ -976,6 +1067,7 @@
       saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
         console.error("[CGQA] save timeout state failed", error);
       });
+      syncPanelDecorations();
       return;
     }
 
@@ -1351,6 +1443,7 @@
       stopPendingCaptureWatcher();
       unlockPendingScroll();
       clearPendingStableTimer();
+      syncPanelDecorations();
     }
     await CGQAStorage.deleteThread(getConversationRef(), threadId);
     syncMainChatVisibility(getMainChatHideTargets());
