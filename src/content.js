@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.33-robust-stop-control";
+  const CONTENT_VERSION = "0.7.37-refresh-and-regenerate";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -90,6 +90,7 @@
       onSend: sendQuestion,
       onStopGeneration: stopActiveGeneration,
       onRefreshAssistantMessage: refreshAssistantMessage,
+      onRegenerateAssistantMessage: regenerateAssistantMessage,
       onDeleteThread: deleteActiveThread,
       getAssistantLabel: () => state.providerLabel,
       getReplyStyle: () => state.replyStyle,
@@ -845,7 +846,8 @@
       return;
     }
 
-    const mainChatItem = createMainChatItem();
+    const assistantMessageIndex = thread.messages.length + 1;
+    const mainChatItem = createMainChatItem({ assistantMessageIndex });
     thread.mainChatItems = [...getMainChatItems(thread), mainChatItem];
 
     const userMessage = {
@@ -862,6 +864,10 @@
       contentFormat: "text"
     };
     thread.messages.push(userMessage, assistantMessage);
+    await submitAssistantPrompt(thread, question, assistantMessage, mainChatItem);
+  }
+
+  async function submitAssistantPrompt(thread, question, assistantMessage, mainChatItem) {
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
     state.submittingPrompt = shouldKeepProviderUiVisibleDuringSubmit();
     if (shouldKeepProviderUiVisibleDuringSend() || state.submittingPrompt) {
@@ -975,10 +981,11 @@
     }));
   }
 
-  function createMainChatItem() {
+  function createMainChatItem(options = {}) {
     return {
       promptToken: `${PROMPT_TOKEN_PREFIX}:${uid("prompt")}`,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      assistantMessageIndex: Number.isInteger(options.assistantMessageIndex) ? options.assistantMessageIndex : -1
     };
   }
 
@@ -1508,9 +1515,59 @@
     CGQASidebar.showToast("已重新获取回复。");
   }
 
+  async function regenerateAssistantMessage(threadId, messageIndex) {
+    const thread = getThread(threadId);
+    const message = thread && thread.messages && thread.messages[messageIndex];
+    if (!thread || !message || message.role !== "assistant" || message.status === "generating") {
+      return;
+    }
+    if (state.pendingResponse || hasGeneratingMessage(thread)) {
+      CGQASidebar.showToast("上一条追问仍在生成中，请稍后再试。");
+      return;
+    }
+    if (isProviderResponseStillGenerating()) {
+      CGQASidebar.showToast(`${state.providerLabel || "AI"} 仍在完成上一条回复，请稍后再试。`);
+      return;
+    }
+
+    const question = getQuestionForAssistantMessage(thread, messageIndex);
+    if (!question) {
+      CGQASidebar.showToast("找不到用于重新生成的上一条问题。");
+      return;
+    }
+
+    const mainChatItem = createMainChatItem({
+      assistantMessageIndex: messageIndex
+    });
+    thread.mainChatItems = [...getMainChatItems(thread), mainChatItem];
+    message.content = "生成中...";
+    message.html = "";
+    message.contentFormat = "text";
+    message.status = "generating";
+    message.createdAt = Date.now();
+    thread.updatedAt = Date.now();
+    await submitAssistantPrompt(thread, question, message, mainChatItem);
+  }
+
+  function getQuestionForAssistantMessage(thread, messageIndex) {
+    for (let index = messageIndex - 1; index >= 0; index -= 1) {
+      const message = thread.messages && thread.messages[index];
+      if (message && message.role === "user" && String(message.content || "").trim()) {
+        return String(message.content || "").trim();
+      }
+    }
+    return "";
+  }
+
   function getPromptTokenForAssistantMessage(thread, messageIndex) {
-    const assistantIndex = getAssistantMessageOrdinal(thread, messageIndex);
     const mainChatItems = getMainChatItems(thread);
+    const indexedItem = [...mainChatItems].reverse().find((item) => {
+      return item.assistantMessageIndex === messageIndex;
+    });
+    if (indexedItem) {
+      return indexedItem.promptToken;
+    }
+    const assistantIndex = getAssistantMessageOrdinal(thread, messageIndex);
     return mainChatItems[assistantIndex] && mainChatItems[assistantIndex].promptToken || "";
   }
 

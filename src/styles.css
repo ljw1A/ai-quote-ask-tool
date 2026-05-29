@@ -438,11 +438,12 @@
 
 .cgqa-message-actions {
   display: flex;
+  gap: 6px;
   justify-content: flex-end;
   margin-top: 6px;
 }
 
-.cgqa-message-refresh {
+.cgqa-message-action-button {
   display: inline-flex;
   width: 26px;
   height: 26px;
@@ -457,26 +458,26 @@
   transition: color 150ms ease, background-color 150ms ease, transform 150ms ease;
 }
 
-.cgqa-message-refresh:hover {
+.cgqa-message-action-button:hover {
   color: var(--cgqa-accent-strong);
   background: var(--cgqa-accent-soft);
 }
 
-.cgqa-message-refresh:focus-visible {
+.cgqa-message-action-button:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 3px rgba(var(--cgqa-accent-rgb), 0.16);
 }
 
-.cgqa-message-refresh:disabled {
+.cgqa-message-action-button:disabled {
   cursor: default;
   opacity: 0.58;
 }
 
-.cgqa-message-refresh.is-loading .cgqa-message-refresh-icon {
+.cgqa-message-action-button.is-loading .cgqa-message-action-icon {
   animation: cgqa-spin 800ms linear infinite;
 }
 
-.cgqa-message-refresh-icon {
+.cgqa-message-action-icon {
   width: 14px;
   height: 14px;
 }

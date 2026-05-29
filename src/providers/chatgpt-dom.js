@@ -9,6 +9,16 @@
   const ATTACHED_SELECTION_BUTTON_CLASS = "cgqa-selection-attached-button";
   const ATTACHED_SELECTION_GROUP_CLASS = "cgqa-selection-button-group";
   const OFFICIAL_SELECTION_ATTACH_TIMEOUT_MS = 900;
+  const ASSISTANT_CONTENT_ROOT_SELECTOR = [
+    ".markdown.prose",
+    ".markdown-new-styling",
+    ".markdown",
+    ".prose:not(.markdown)",
+    "[data-testid*='canvas' i] [data-testid*='content' i]",
+    "[data-testid*='artifact' i] [data-testid*='content' i]",
+    "[data-testid*='textdoc' i]",
+    "[data-testid*='document-content' i]"
+  ].join(",");
   const BLOCK_REFERENCE_SELECTOR = "pre, table, .cm-editor, .cm-content";
   const SURFACE_SELECTOR = ".katex, math";
   const COMPLEX_SELECTOR = `${SURFACE_SELECTOR}, ${BLOCK_REFERENCE_SELECTOR}`;
@@ -114,29 +124,49 @@
     });
   }
 
-  function getMarkdownNodes(turn) {
-    const markdowns = getMessageNodesByRole(turn, "assistant").flatMap((message) => {
-      return Array.from(message.querySelectorAll(".markdown.prose, .markdown-new-styling, .markdown"));
-    });
-    return markdowns.filter((markdown) => {
-      return !markdown.parentElement || !markdown.parentElement.closest(".markdown.prose, .markdown-new-styling, .markdown");
+  function getAssistantContentRoots(turn) {
+    const roots = getMessageNodesByRole(turn, "assistant").flatMap(getAssistantContentRootCandidates)
+      .filter(isUsableAssistantContentRoot);
+    const uniqueRoots = sortElementsByDocumentOrder(uniqueElements(roots));
+    return uniqueRoots.filter((root) => {
+      return !uniqueRoots.some((other) => other !== root && root.contains(other));
     });
   }
 
-  function getMessageNodeForMarkdown(markdown) {
-    return markdown ? markdown.closest("[data-message-author-role='assistant']") : null;
+  function getAssistantContentRootCandidates(message) {
+    if (!message || !message.querySelectorAll) {
+      return [];
+    }
+    const candidates = [];
+    if (message.matches && message.matches(ASSISTANT_CONTENT_ROOT_SELECTOR)) {
+      candidates.push(message);
+    }
+    candidates.push(...message.querySelectorAll(ASSISTANT_CONTENT_ROOT_SELECTOR));
+    return candidates;
+  }
+
+  function isUsableAssistantContentRoot(root) {
+    return Boolean(
+      root
+      && !root.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast")
+      && getReadableText(root).trim()
+    );
+  }
+
+  function getMessageNodeForContentRoot(contentRoot) {
+    return contentRoot ? contentRoot.closest("[data-message-author-role='assistant']") : null;
   }
 
   function getMessageIdFromNode(message) {
     return message ? message.getAttribute("data-message-id") || "" : "";
   }
 
-  function getMarkdownNodeContainingNode(turn, node) {
-    return getMarkdownNodes(turn).find((markdown) => isInMarkdown(markdown, node)) || null;
+  function getContentRootContainingNode(turn, node) {
+    return getAssistantContentRoots(turn).find((contentRoot) => isInContentRoot(contentRoot, node)) || null;
   }
 
-  function getMarkdownNodeIndex(turn, markdown) {
-    return getMarkdownNodes(turn).indexOf(markdown);
+  function getContentRootIndex(turn, contentRoot) {
+    return getAssistantContentRoots(turn).indexOf(contentRoot);
   }
 
   function getMessageId(turn) {
@@ -148,14 +178,14 @@
     return turn ? turn.getAttribute("data-turn-id") || turn.getAttribute("data-testid") || "" : "";
   }
 
-  function isInMarkdown(markdown, node) {
-    if (!markdown || !node) {
+  function isInContentRoot(contentRoot, node) {
+    if (!contentRoot || !node) {
       return false;
     }
     if (node.nodeType === Node.TEXT_NODE) {
-      return markdown.contains(node);
+      return contentRoot.contains(node);
     }
-    return markdown === node || markdown.contains(node);
+    return contentRoot === node || contentRoot.contains(node);
   }
 
   function isInsideComplexContent(node) {
@@ -323,7 +353,7 @@
   }
 
   function getTextOffset(root, targetNode, targetOffset) {
-    if (!root || !targetNode || !isInMarkdown(root, targetNode)) {
+    if (!root || !targetNode || !isInContentRoot(root, targetNode)) {
       return -1;
     }
 
@@ -421,18 +451,18 @@
       return { ok: false, reason: "暂不支持跨回复提问，请重新选择同一条回复中的内容。" };
     }
 
-    const startMarkdown = getMarkdownNodeContainingNode(startTurn, range.startContainer);
-    const endMarkdown = getMarkdownNodeContainingNode(startTurn, range.endContainer);
-    if (!startMarkdown || !endMarkdown) {
+    const startContentRoot = getContentRootContainingNode(startTurn, range.startContainer);
+    const endContentRoot = getContentRootContainingNode(startTurn, range.endContainer);
+    if (!startContentRoot || !endContentRoot) {
       return { ok: false, reason: "请只选择 ChatGPT 回复正文，不要选择思考提示或操作按钮。" };
     }
-    if (startMarkdown !== endMarkdown) {
+    if (startContentRoot !== endContentRoot) {
       return { ok: false, reason: "暂不支持跨思考分段选择，请只选择同一段回复正文。" };
     }
 
-    const markdown = startMarkdown;
-    const markdownIndex = getMarkdownNodeIndex(startTurn, markdown);
-    const sourceMessage = getMessageNodeForMarkdown(markdown);
+    const markdown = startContentRoot;
+    const markdownIndex = getContentRootIndex(startTurn, markdown);
+    const sourceMessage = getMessageNodeForContentRoot(markdown);
 
     if (isBadSelectionNode(range.startContainer) || isBadSelectionNode(range.endContainer)) {
       return { ok: false, reason: "请只选择 ChatGPT 回复正文内容。" };
@@ -495,8 +525,12 @@
       }
 
       if (Date.now() - startedAt >= OFFICIAL_SELECTION_ATTACH_TIMEOUT_MS) {
-        if (!button.isConnected && hasActiveTextSelection() && typeof context.showToast === "function") {
-          context.showToast("未找到 ChatGPT 选择工具条，请重新选择正文内容。");
+        if (!button.isConnected && hasActiveTextSelection()) {
+          if (typeof context.onFallback === "function") {
+            context.onFallback();
+          } else if (typeof context.showToast === "function") {
+            context.showToast("未找到 ChatGPT 选择工具条，请重新选择正文内容。");
+          }
         }
         return;
       }
@@ -984,7 +1018,7 @@
   }
 
   function resolveAnchorMarkdownAndRange(turn, anchor) {
-    const markdowns = getMarkdownNodes(turn);
+    const markdowns = getAssistantContentRoots(turn);
     const preferredIndex = Number.isInteger(anchor.markdownIndex) ? anchor.markdownIndex : -1;
     const candidates = preferredIndex >= 0 && markdowns[preferredIndex]
       ? [markdowns[preferredIndex]]
@@ -1081,25 +1115,25 @@
     const role = getTurnRole(turn);
     const message = getMessageNodeByRole(turn, role) || turn;
     if (role === "assistant") {
-      return getMarkdownText(getMarkdownNodes(turn));
+      return getAssistantContentText(getAssistantContentRoots(turn));
     }
     return getReadableText(message).trim();
   }
 
-  function getMarkdownText(markdowns) {
-    return markdowns.map((markdown) => getReadableText(markdown).trim()).filter(Boolean).join("\n\n");
+  function getAssistantContentText(contentRoots) {
+    return contentRoots.map((contentRoot) => getReadableText(contentRoot).trim()).filter(Boolean).join("\n\n");
   }
 
-  function getMarkdownHtml(markdowns) {
-    return markdowns.map((markdown) => getSanitizedHtml(markdown)).filter(Boolean).join("");
+  function getAssistantContentHtml(contentRoots) {
+    return contentRoots.map((contentRoot) => getSanitizedHtml(contentRoot)).filter(Boolean).join("");
   }
 
   function getAllTurnRecords() {
     return getAllTurns().map((turn, index) => {
       const role = getTurnRole(turn);
       const message = getMessageNodeByRole(turn, role);
-      const markdowns = role === "assistant" ? getMarkdownNodes(turn) : [];
-      const html = getMarkdownHtml(markdowns);
+      const contentRoots = role === "assistant" ? getAssistantContentRoots(turn) : [];
+      const html = getAssistantContentHtml(contentRoots);
       return {
         index,
         turn,
@@ -1151,9 +1185,9 @@
   function getAssistantMessageRecords() {
     return getAssistantTurns().map((turn, index) => {
       const message = getMessageNode(turn);
-      const markdowns = getMarkdownNodes(turn);
-      const text = getMarkdownText(markdowns);
-      const html = getMarkdownHtml(markdowns);
+      const contentRoots = getAssistantContentRoots(turn);
+      const text = getAssistantContentText(contentRoots);
+      const html = getAssistantContentHtml(contentRoots);
       return {
         index,
         turn,

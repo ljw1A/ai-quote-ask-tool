@@ -1450,23 +1450,61 @@
 
   function findStopButton() {
     const composer = getComposerContainer() || document;
-    const preferred = Array.from(composer.querySelectorAll("[role='button'], button")).find((button) => {
+    const preferred = getComposerControlCandidates(composer).find((button) => {
       return isStopButton(button) && /停止|stop/.test(getNodeControlText(button));
     });
     if (isStopButton(preferred)) {
       return preferred;
     }
-    return Array.from(composer.querySelectorAll("[role='button'], button")).find(isStopButton)
-      || Array.from(document.querySelectorAll("[role='button'], button")).find(isStopButton)
+    return getComposerControlCandidates(composer).find(isStopButton)
+      || getComposerControlCandidates(document).find(isStopButton)
       || null;
   }
 
   function isStopButton(button) {
-    return Boolean(button
+    if (!button || button.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const text = getNodeControlText(button);
+    return Boolean(
+      !button.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast")
       && !button.disabled
       && button.getAttribute("aria-disabled") !== "true"
-      && /停止|stop|中止|cancel/i.test(getNodeControlText(button))
-      && !/上传|upload|附件|attach|麦克风|microphone|语音|voice|图片|image/.test(getNodeControlText(button)));
+      && !String(button.className || "").includes("disabled")
+      && button.tabIndex !== -1
+      && (/停止|stop|中止|cancel/i.test(text) || hasSquareStopIcon(button))
+      && !/上传|upload|附件|attach|麦克风|microphone|语音|voice|图片|image|search|think|深度思考|智能搜索/.test(text));
+  }
+
+  function getComposerControlCandidates(scope) {
+    const seen = new Set();
+    return Array.from(scope.querySelectorAll(".ds-icon-button, [role='button'], button")).filter((node) => {
+      if (!node || seen.has(node)) {
+        return false;
+      }
+      seen.add(node);
+      return true;
+    });
+  }
+
+  function hasSquareStopIcon(button) {
+    if (!button || button.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const text = getNodeControlText(button);
+    if (/停止|stop|中止|cancel|square/.test(text)) {
+      return true;
+    }
+    if (button.querySelector("svg rect")) {
+      return true;
+    }
+    return Array.from(button.querySelectorAll("svg path")).some((path) => {
+      const d = String(path.getAttribute("d") || "").replace(/,/g, " ");
+      return /\bh\s*-?\d/i.test(d)
+        && /\bv\s*-?\d/i.test(d)
+        && /z\s*$/i.test(d.trim())
+        && !/\bl\b/i.test(d);
+    });
   }
 
   function clearPromptText() {

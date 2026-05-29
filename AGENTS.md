@@ -65,6 +65,7 @@
 Before committing changes that touch quote selection, mark rendering, sending, capture, or sidebar display, verify these cases manually or with focused tests:
 
 - Select normal text, click `提问`, and confirm text highlight plus chip appear immediately.
+- Select text inside ChatGPT document/card-style assistant output; the floating `提问` action appears even when ChatGPT has no native selection toolbar.
 - Close the panel without sending; the draft mark disappears.
 - Send the first question; the draft mark remains, is promoted, and chip count updates.
 - Refresh the page; persisted marks restore conservatively without duplicate chips.
@@ -75,6 +76,7 @@ Before committing changes that touch quote selection, mark rendering, sending, c
 - During streaming generation, the page should not auto-scroll downward, but the user can still manually scroll to inspect content.
 - During sidebar generation, the send button shows a square status icon; overflow content shows dots while generating and a down arrow after completion.
 - Clicking the square generation button stops the provider response and saves the partial sidebar reply without leaving a generating message.
+- Clicking an assistant reply's circular arrow re-fetches the current page reply, while the sparkle action regenerates that reply from the preceding user question.
 - Captured sidebar output does not include plugin chips, hidden prompts, or tracking tokens.
 - Saving or deleting a thread updates the storage conversation index used by the management page.
 - The management page reads structured storage data only; do not scan ChatGPT DOM to reconstruct question history.

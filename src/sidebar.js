@@ -51,6 +51,10 @@
       arrowUp: ["M12 19V5", "M5 12l7-7 7 7"],
       chevronUp: ["M6 15l6-6 6 6"],
       refresh: ["M21 12a9 9 0 0 1-15.4 6.4L3 16", "M3 21v-5h5", "M3 12A9 9 0 0 1 18.4 5.6L21 8", "M21 3v5h-5"],
+      sparkles: [
+        "M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6L12 3z",
+        "M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"
+      ],
       square: ["M6 6h12v12H6z"],
       message: [
         "M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z",
@@ -793,11 +797,15 @@
     labelRow.append(meta);
     body.append(time);
     content.append(labelRow, body);
-    if (shouldShowRefreshButton(message, callbacks)) {
-      content.append(renderAssistantRefreshAction(callbacks, thread, messageIndex));
+    if (shouldShowAssistantActions(message, callbacks)) {
+      content.append(renderAssistantActions(callbacks, thread, messageIndex, message));
     }
     item.append(content);
     return item;
+  }
+
+  function shouldShowAssistantActions(message, callbacks) {
+    return shouldShowRefreshButton(message, callbacks) || shouldShowRegenerateButton(message, callbacks);
   }
 
   function shouldShowRefreshButton(message, callbacks) {
@@ -809,23 +817,51 @@
     );
   }
 
-  function renderAssistantRefreshAction(callbacks, thread, messageIndex) {
+  function shouldShowRegenerateButton(message, callbacks) {
+    return Boolean(
+      message
+      && message.role === "assistant"
+      && message.status !== "generating"
+      && typeof callbacks.onRegenerateAssistantMessage === "function"
+    );
+  }
+
+  function renderAssistantActions(callbacks, thread, messageIndex, message) {
     const actions = createElement("div", "cgqa-message-actions");
-    const button = createElement("button", "cgqa-message-refresh");
+    if (shouldShowRefreshButton(message, callbacks)) {
+      actions.append(renderAssistantActionButton({
+        className: "cgqa-message-action-button cgqa-message-refresh",
+        iconName: "refresh",
+        label: "重新获取回复",
+        onClick: () => callbacks.onRefreshAssistantMessage(thread.threadId, messageIndex)
+      }));
+    }
+    if (shouldShowRegenerateButton(message, callbacks)) {
+      actions.append(renderAssistantActionButton({
+        className: "cgqa-message-action-button cgqa-message-regenerate",
+        iconName: "sparkles",
+        label: "重新生成",
+        onClick: () => callbacks.onRegenerateAssistantMessage(thread.threadId, messageIndex)
+      }));
+    }
+    return actions;
+  }
+
+  function renderAssistantActionButton(options) {
+    const button = createElement("button", options.className);
     button.type = "button";
-    button.title = "重新获取回复";
-    button.setAttribute("aria-label", "重新获取回复");
-    button.append(createSvgIcon("refresh", "cgqa-svg-icon cgqa-message-refresh-icon"));
+    button.title = options.label;
+    button.setAttribute("aria-label", options.label);
+    button.append(createSvgIcon(options.iconName, "cgqa-svg-icon cgqa-message-action-icon"));
     button.addEventListener("click", () => {
       button.disabled = true;
       button.classList.add("is-loading");
-      Promise.resolve(callbacks.onRefreshAssistantMessage(thread.threadId, messageIndex)).finally(() => {
+      Promise.resolve(options.onClick()).finally(() => {
         button.disabled = false;
         button.classList.remove("is-loading");
       });
     });
-    actions.append(button);
-    return actions;
+    return button;
   }
 
   function renderMessageBody(body, message) {
