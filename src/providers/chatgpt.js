@@ -66,6 +66,7 @@
       setNativeGenerationControlsHidden: CGQAChatGPTDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQAChatGPTDom.syncPendingResponseState,
       isResponseGenerating: CGQAChatGPTDom.isResponseGenerating,
+      stopGeneration: CGQAChatGPTDom.stopGeneration,
       getScrollContainer: CGQAChatGPTDom.getScrollContainer,
       submitPrompt: CGQAChatGPTDom.submitPrompt
     };

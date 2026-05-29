@@ -1394,7 +1394,50 @@
   }
 
   function isResponseGenerating() {
-    return getNativeGenerationControlCandidates().length > 0;
+    return getNativeGenerationControlCandidates().some(isVisibleIgnoringPluginHiddenClass);
+  }
+
+  async function stopGeneration() {
+    document.querySelectorAll(`.${HIDDEN_NATIVE_CONTROL_CLASS}`).forEach((node) => {
+      unhideNativeGenerationControl(node);
+    });
+    const button = findNativeGenerationButton();
+    if (!button) {
+      return false;
+    }
+    unhideNativeGenerationControl(button);
+    clickElement(button);
+    if (typeof button.click === "function") {
+      button.click();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return true;
+  }
+
+  function isVisibleIgnoringPluginHiddenClass(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const hadHiddenClass = element.classList.contains(HIDDEN_NATIVE_CONTROL_CLASS);
+    if (hadHiddenClass) {
+      element.classList.remove(HIDDEN_NATIVE_CONTROL_CLASS);
+    }
+    try {
+      return isVisibleElement(element);
+    } finally {
+      if (hadHiddenClass) {
+        element.classList.add(HIDDEN_NATIVE_CONTROL_CLASS);
+      }
+    }
+  }
+
+  function isVisibleElement(element) {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0
+      && rect.height > 0
+      && style.display !== "none"
+      && style.visibility !== "hidden";
   }
 
   function getNativeGenerationControlCandidates() {
@@ -1425,16 +1468,50 @@
     return Array.from(candidates);
   }
 
+  function findNativeGenerationButton() {
+    const selectors = [
+      "button[data-testid*='stop' i]",
+      "[role='button'][data-testid*='stop' i]",
+      "button[aria-label*='stop' i]",
+      "[role='button'][aria-label*='stop' i]",
+      "button[aria-label*='停止']",
+      "[role='button'][aria-label*='停止']"
+    ];
+    return selectors.map((selector) => {
+      try {
+        return document.querySelector(selector);
+      } catch (_error) {
+        return null;
+      }
+    }).find(isGenerationControlButton)
+      || Array.from(document.querySelectorAll("button, [role='button']")).find(isGenerationControlButton)
+      || null;
+  }
+
+  function isGenerationControlButton(node) {
+    return Boolean(
+      node
+      && node.nodeType === Node.ELEMENT_NODE
+      && !node.closest(".cgqa-root, .cgqa-selection-menu, .cgqa-toast")
+      && !node.disabled
+      && node.getAttribute("aria-disabled") !== "true"
+      && isGenerationControlText(getNodeControlText(node))
+    );
+  }
+
   function getNodeControlText(node) {
     return [
       node.getAttribute("aria-label") || "",
       node.getAttribute("title") || "",
+      node.getAttribute("data-testid") || "",
+      node.getAttribute("class") || "",
       node.textContent || ""
     ].join(" ").toLowerCase();
   }
 
   function isGenerationControlText(text) {
-    return /停止|stop/.test(text) && /流式|stream|生成|generat/.test(text);
+    return /停止|stop|中止|cancel/.test(text)
+      && !/上传|upload|附件|attach|麦克风|microphone|语音|voice|图片|image/.test(text);
   }
 
   function hideNativeGenerationControl(node) {
@@ -1745,6 +1822,7 @@
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
     isResponseGenerating,
+    stopGeneration,
     getScrollContainer,
     submitPrompt
   };

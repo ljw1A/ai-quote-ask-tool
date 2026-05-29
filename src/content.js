@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const CONTENT_VERSION = "0.7.15-streaming-send-visibility";
+  const CONTENT_VERSION = "0.7.33-robust-stop-control";
   const RUNTIME_KEY = "CGQAContentRuntime";
 
   const existingRuntime = globalThis[RUNTIME_KEY];
@@ -31,6 +31,7 @@
     active: false,
     creatingThread: false,
     loadingConversation: false,
+    submittingPrompt: false,
     restoring: false,
     replyStyle: {
       mode: "default",
@@ -45,6 +46,8 @@
   };
 
   const RESPONSE_STABLE_DELAY_MS = 1400;
+  const RESPONSE_STABLE_FALLBACK_MS = 6000;
+  const RESPONSE_SUBMISSION_TIMEOUT_MS = 15000;
   const RESPONSE_TIMEOUT_MS = 120000;
   const STREAM_SAVE_DELAY_MS = 2000;
   const RESTORE_DELAYS_MS = [250, 1000, 2500, 5000];
@@ -85,6 +88,7 @@
       onClose: closeSidebar,
       onBeforeSend: lockPendingScroll,
       onSend: sendQuestion,
+      onStopGeneration: stopActiveGeneration,
       onRefreshAssistantMessage: refreshAssistantMessage,
       onDeleteThread: deleteActiveThread,
       getAssistantLabel: () => state.providerLabel,
@@ -175,9 +179,27 @@
       sourceProviderId: thread.sourceProviderId || state.providerId,
       sourceProviderLabel: thread.sourceProviderLabel || state.providerLabel,
       quoteText: String(thread.quoteText || ""),
-      messages: Array.isArray(thread.messages) ? thread.messages : [],
+      messages: normalizeStoredMessages(thread.messages),
       mainChatItems: getMainChatItems(thread)
     };
+  }
+
+  function normalizeStoredMessages(messages) {
+    return (Array.isArray(messages) ? messages : []).map((message) => {
+      if (!message || typeof message !== "object") {
+        return message;
+      }
+      if (message.role !== "assistant" || message.status !== "generating") {
+        return message;
+      }
+
+      const hasPartialContent = String(message.content || "").trim() && message.content !== "生成中...";
+      return {
+        ...message,
+        content: hasPartialContent ? message.content : "上次回复在页面刷新或扩展重载后中断。",
+        status: "interrupted"
+      };
+    });
   }
 
   function isCurrentThreadShape(thread) {
@@ -414,6 +436,7 @@
   function resetTransientState() {
     state.pendingSelection = null;
     state.pendingResponse = null;
+    state.submittingPrompt = false;
     stopPendingCaptureWatcher();
     unlockPendingScroll();
     clearPendingStableTimer();
@@ -815,6 +838,12 @@
       }
       return;
     }
+    if (isProviderResponseStillGenerating()) {
+      CGQASidebar.showToast(`${state.providerLabel || "AI"} 仍在完成上一条回复，请稍后再发。`);
+      renderSavedThread(thread);
+      sidebar.focusInput();
+      return;
+    }
 
     const mainChatItem = createMainChatItem();
     thread.mainChatItems = [...getMainChatItems(thread), mainChatItem];
@@ -834,18 +863,26 @@
     };
     thread.messages.push(userMessage, assistantMessage);
     state.pendingResponse = createResponseTracker(thread.threadId, mainChatItem.promptToken);
-    if (shouldKeepProviderUiVisibleDuringSend()) {
+    state.submittingPrompt = shouldKeepProviderUiVisibleDuringSubmit();
+    if (shouldKeepProviderUiVisibleDuringSend() || state.submittingPrompt) {
       syncPanelDecorations();
+      await waitForSubmitWindowLayout();
     }
     lockPendingScroll();
 
     try {
       await saveAndRenderThread(thread);
       syncPageDecorations();
+      if (state.submittingPrompt) {
+        syncPanelDecorations();
+        await waitForSubmitWindowLayout();
+      }
       startPendingCaptureWatcher();
       await provider.submitPrompt(buildPrompt(thread, question, mainChatItem.promptToken));
+      state.submittingPrompt = false;
       syncPageDecorations();
     } catch (error) {
+      state.submittingPrompt = false;
       state.pendingResponse = null;
       stopPendingCaptureWatcher();
       unlockPendingScroll();
@@ -857,6 +894,56 @@
       syncPageDecorations();
       syncPanelDecorations();
       CGQASidebar.showToast(assistantMessage.content);
+    }
+  }
+
+  async function stopActiveGeneration() {
+    const pending = state.pendingResponse;
+    const thread = getThread(state.activeThreadId);
+    const generating = thread && [...(thread.messages || [])].reverse().find((message) => {
+      return message.role === "assistant" && message.status === "generating";
+    });
+    if (!pending || !thread || !generating) {
+      return;
+    }
+    if (!provider || typeof provider.stopGeneration !== "function") {
+      CGQASidebar.showToast("当前站点暂不支持从侧栏停止生成。");
+      return;
+    }
+
+    try {
+      const stopped = await provider.stopGeneration();
+      if (!stopped) {
+        CGQASidebar.showToast("没有找到可停止的生成按钮。");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const latest = findPendingAssistantCandidate(thread);
+      const latestText = latest && latest.text || "";
+      if (latestText && latestText !== thread.quoteText) {
+        generating.content = latestText;
+        generating.html = latest.html || "";
+        generating.contentFormat = generating.html ? "html" : "text";
+      } else if (!String(generating.content || "").trim() || generating.content === "生成中...") {
+        generating.content = "已停止生成。";
+        generating.html = "";
+        generating.contentFormat = "text";
+      }
+      generating.status = "interrupted";
+      thread.updatedAt = Date.now();
+      state.pendingResponse = null;
+      state.submittingPrompt = false;
+      stopPendingCaptureWatcher();
+      clearPendingStableTimer();
+      clearPendingStreamSaveTimer();
+      unlockPendingScroll();
+      await saveAndRenderThread(thread);
+      await completeProviderPendingResponse(pending);
+      syncPageDecorations();
+      syncPanelDecorations();
+    } catch (error) {
+      console.error("[CGQA] stop generation failed", error);
+      CGQASidebar.showToast("停止生成失败，请稍后重试。");
     }
   }
 
@@ -926,7 +1013,7 @@
       return;
     }
     const hasExplicitTargets = Array.isArray(targets);
-    if (!hasExplicitTargets && shouldKeepProviderUiVisibleDuringSend()) {
+    if (!hasExplicitTargets && (shouldKeepProviderUiVisibleDuringSend() || state.submittingPrompt)) {
       return;
     }
     const resolvedTargets = hasExplicitTargets ? targets : getMainChatHideTargets();
@@ -944,6 +1031,22 @@
     );
   }
 
+  function shouldKeepProviderUiVisibleDuringSubmit() {
+    return Boolean(
+      state.pendingResponse
+      && provider
+      && provider.requiresVisibleProviderUiDuringSubmit
+    );
+  }
+
+  function waitForSubmitWindowLayout() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
   function syncKnownMainChatVisibility(targets) {
     if (!provider.syncKnownHiddenMainTurns) {
       return;
@@ -955,7 +1058,7 @@
     if (!provider.setMainComposerHidden) {
       return;
     }
-    if (shouldKeepProviderUiVisibleDuringSend()) {
+    if (shouldKeepProviderUiVisibleDuringSend() || state.submittingPrompt) {
       provider.setMainComposerHidden(false);
       return;
     }
@@ -966,6 +1069,10 @@
     if (!provider.setNativeGenerationControlsHidden) {
       return;
     }
+    if (state.submittingPrompt) {
+      provider.setNativeGenerationControlsHidden(false);
+      return;
+    }
     provider.setNativeGenerationControlsHidden(Boolean(state.activeThreadId));
   }
 
@@ -974,7 +1081,7 @@
       return;
     }
     provider.syncPendingResponseState({
-      active: Boolean(state.pendingResponse),
+      active: Boolean(state.pendingResponse && !state.submittingPrompt),
       threadId: state.pendingResponse && state.pendingResponse.threadId || "",
       promptToken: state.pendingResponse && state.pendingResponse.promptToken || ""
     });
@@ -1073,6 +1180,19 @@
 
     const candidate = findPendingAssistantCandidate(thread);
     if (!candidate || !candidate.text) {
+      if (isPendingSubmissionMissingPastTimeout()) {
+        generating.content = "未检测到主聊天已接收本次追问，请重新发送。";
+        generating.status = "failed";
+        state.pendingResponse = null;
+        stopPendingCaptureWatcher();
+        unlockPendingScroll();
+        clearPendingStableTimer();
+        clearPendingStreamSaveTimer();
+        saveAndRenderThread(thread).then(syncPageDecorations).catch((error) => {
+          console.error("[CGQA] save missing submission state failed", error);
+        });
+        syncPanelDecorations();
+      }
       return;
     }
 
@@ -1126,7 +1246,10 @@
       return;
     }
 
-    pending.candidate = { signature, text: candidate.text, html: candidateHtml };
+    const stableSince = sameCandidate && pending.candidate.stableSince
+      ? pending.candidate.stableSince
+      : Date.now();
+    pending.candidate = { signature, text: candidate.text, html: candidateHtml, stableSince };
     clearPendingStableTimer();
     state.pendingStableTimer = setTimeout(async () => {
       state.pendingStableTimer = 0;
@@ -1139,7 +1262,7 @@
       if (!text || text === thread.quoteText) {
         return;
       }
-      if (isProviderResponseStillGenerating()) {
+      if (isProviderResponseStillGenerating() && !isStableCandidatePastFallback()) {
         return;
       }
       generating.content = text;
@@ -1165,6 +1288,36 @@
       return Boolean(provider.isResponseGenerating());
     } catch (error) {
       console.warn("[CGQA] provider generation state check failed", error);
+      return false;
+    }
+  }
+
+  function isStableCandidatePastFallback() {
+    const stableSince = state.pendingResponse
+      && state.pendingResponse.candidate
+      && state.pendingResponse.candidate.stableSince;
+    return Boolean(stableSince && Date.now() - stableSince >= RESPONSE_STABLE_FALLBACK_MS);
+  }
+
+  function isPendingSubmissionMissingPastTimeout() {
+    const pending = state.pendingResponse;
+    return Boolean(
+      pending
+      && Date.now() - pending.startedAt > RESPONSE_SUBMISSION_TIMEOUT_MS
+      && !hasPromptTokenUserRecord(pending.promptToken)
+    );
+  }
+
+  function hasPromptTokenUserRecord(promptToken) {
+    if (!promptToken || !provider || typeof provider.getAllTurnRecords !== "function") {
+      return false;
+    }
+    try {
+      return provider.getAllTurnRecords().some((record) => {
+        return record.role === "user" && record.text && record.text.includes(promptToken);
+      });
+    } catch (error) {
+      console.warn("[CGQA] prompt token check failed", error);
       return false;
     }
   }

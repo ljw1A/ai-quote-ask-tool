@@ -1091,15 +1091,37 @@
   }
 
   function getPromptEditor() {
-    return document.querySelector("rich-textarea .ql-editor[contenteditable='true'][role='textbox']")
-      || document.querySelector(".ql-editor[contenteditable='true'][aria-label*='Gemini']");
+    const editors = Array.from(document.querySelectorAll([
+      "rich-textarea .ql-editor[contenteditable='true'][role='textbox']",
+      ".ql-editor[contenteditable='true'][aria-label*='Gemini']",
+      ".ql-editor[contenteditable='true']"
+    ].join(","))).filter((editor) => !editor.closest(".cgqa-root"));
+    return editors.find(isVisibleElement) || editors[editors.length - 1] || null;
   }
 
   function getComposerContainer() {
     const editor = getPromptEditor();
-    return editor && editor.closest("input-area-v2, .text-input-field, .input-area-container")
-      || document.querySelector("input-area-v2")
-      || null;
+    const textField = editor && editor.closest(".text-input-field");
+    const richTextarea = editor && editor.closest("rich-textarea");
+    const scopes = [
+      editor && editor.closest("input-container"),
+      editor && editor.closest("input-area-v2"),
+      editor && editor.closest(".input-area-container"),
+      richTextarea && richTextarea.closest("input-container"),
+      richTextarea && richTextarea.closest("input-area-v2"),
+      richTextarea && richTextarea.closest(".input-area-container"),
+      textField && textField.parentElement,
+      textField,
+      document.querySelector("input-container"),
+      document.querySelector("input-area-v2"),
+      document.querySelector(".input-area-container")
+    ].filter((scope, index, list) => {
+      return scope
+        && scope.nodeType === Node.ELEMENT_NODE
+        && !scope.closest(".cgqa-root")
+        && list.indexOf(scope) === index;
+    });
+    return scopes.find((scope) => scope.querySelector("button, [role='button']")) || scopes[0] || null;
   }
 
   function getComposerHideContainer() {
@@ -1153,13 +1175,56 @@
   }
 
   function isResponseGenerating() {
-    return Boolean(findStopButton());
+    return isVisibleIgnoringPluginHiddenClass(findStopButton());
+  }
+
+  async function stopGeneration() {
+    document.querySelectorAll(`.${HIDDEN_NATIVE_CONTROL_CLASS}`).forEach(unhideNativeGenerationControl);
+    const button = findStopButton();
+    if (!button) {
+      return false;
+    }
+    unhideNativeGenerationControl(button);
+    clickElement(button);
+    if (typeof button.click === "function") {
+      button.click();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return true;
+  }
+
+  function isVisibleIgnoringPluginHiddenClass(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const hadHiddenClass = element.classList.contains(HIDDEN_NATIVE_CONTROL_CLASS);
+    if (hadHiddenClass) {
+      element.classList.remove(HIDDEN_NATIVE_CONTROL_CLASS);
+    }
+    try {
+      return isVisibleElement(element);
+    } finally {
+      if (hadHiddenClass) {
+        element.classList.add(HIDDEN_NATIVE_CONTROL_CLASS);
+      }
+    }
+  }
+
+  function isVisibleElement(element) {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0
+      && rect.height > 0
+      && style.display !== "none"
+      && style.visibility !== "hidden";
   }
 
   function getNodeControlText(node) {
     return [
       node.getAttribute("aria-label") || "",
       node.getAttribute("title") || "",
+      node.getAttribute("data-testid") || "",
+      node.getAttribute("class") || "",
       node.textContent || ""
     ].join(" ").toLowerCase();
   }
@@ -1186,34 +1251,169 @@
     }
 
     editor.focus();
+    editor.click();
+    dispatchPromptPaste(editor, text);
+    selectEditorContents(editor);
+
+    const inserted = document.execCommand && document.execCommand("insertText", false, text);
+    if (!inserted || !doesPromptContainText(text)) {
+      setEditorPlainText(editor, text);
+    }
+    dispatchEditorInput(editor, text);
+    return doesPromptContainText(text);
+  }
+
+  function dispatchPromptPaste(editor, text) {
+    if (!editor || typeof DataTransfer !== "function" || typeof ClipboardEvent !== "function") {
+      return;
+    }
+    try {
+      const clipboardData = new DataTransfer();
+      clipboardData.setData("text/plain", text);
+      editor.dispatchEvent(new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clipboardData
+      }));
+    } catch (_error) {
+      // Synthetic paste support varies between Chromium builds; insertText handles the fallback.
+    }
+  }
+
+  function selectEditorContents(editor) {
     const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(editor);
     selection.removeAllRanges();
     selection.addRange(range);
+  }
 
-    const inserted = document.execCommand && document.execCommand("insertText", false, text);
-    if (!inserted) {
-      editor.textContent = text;
+  function setEditorPlainText(editor, text) {
+    editor.replaceChildren();
+    const lines = String(text || "").split(/\r?\n/);
+    lines.forEach((line) => {
+      const paragraph = document.createElement("p");
+      if (line) {
+        paragraph.textContent = line;
+      } else {
+        paragraph.append(document.createElement("br"));
+      }
+      editor.append(paragraph);
+    });
+  }
+
+  function dispatchEditorInput(editor, text) {
+    const targets = [
+      editor,
+      editor.closest("rich-textarea"),
+      getComposerContainer(),
+      getComposerHideContainer()
+    ].filter((target, index, list) => {
+      return target
+        && target.nodeType === Node.ELEMENT_NODE
+        && !target.closest(".cgqa-root")
+        && list.indexOf(target) === index;
+    });
+    targets.forEach((target) => {
+      try {
+        target.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, composed: true, inputType: "insertText", data: text }));
+      } catch (_error) {
+        target.dispatchEvent(new Event("beforeinput", { bubbles: true, composed: true }));
+      }
+      try {
+        target.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: text }));
+      } catch (_error) {
+        target.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      }
+      target.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      try {
+        target.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, composed: true, data: text }));
+      } catch (_error) {
+        target.dispatchEvent(new Event("compositionend", { bubbles: true, composed: true }));
+      }
+    });
+  }
+
+  function doesPromptContainText(text) {
+    const promptText = getPromptText();
+    const trackingToken = extractTrackingToken(text);
+    if (trackingToken) {
+      return promptText.includes(trackingToken);
     }
-    editor.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: text }));
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-    return true;
+    const expected = normalizeText(String(text || "")).trim();
+    return Boolean(expected && promptText.includes(expected.slice(0, Math.min(expected.length, 48))));
   }
 
   function findSendButton() {
-    const composer = getComposerContainer() || document;
-    const preferred = composer.querySelector("button.send-button.submit[aria-label*='发送'], button[aria-label*='发送'].send-button");
-    if (preferred && isSendButtonEnabled(preferred)) {
+    const editor = getPromptEditor();
+    const composer = getComposerContainer();
+    const preferred = findSendButtonInScope(composer);
+    if (preferred) {
       return preferred;
     }
-    return Array.from(composer.querySelectorAll("button")).find((button) => {
-      return /发送|send/i.test(`${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`) && isSendButtonEnabled(button);
+
+    const editorRect = editor ? editor.getBoundingClientRect() : null;
+    const buttons = Array.from(document.querySelectorAll("button, [role='button']")).filter((button) => {
+      if (button.closest(".cgqa-root") || !isSendButton(button) || !isSendButtonEnabled(button)) {
+        return false;
+      }
+      if (!editorRect) {
+        return true;
+      }
+      const rect = button.getBoundingClientRect();
+      return rect.bottom >= editorRect.top - 120
+        && rect.top <= editorRect.bottom + 180
+        && rect.right >= editorRect.left - 80
+        && rect.left <= editorRect.right + 260;
+    });
+    return buttons.sort((a, b) => {
+      const rectA = a.getBoundingClientRect();
+      const rectB = b.getBoundingClientRect();
+      return rectB.left - rectA.left || rectB.top - rectA.top;
+    })[0] || null;
+  }
+
+  function findSendButtonInScope(scope) {
+    if (!scope || !scope.querySelector) {
+      return null;
+    }
+    return [
+      "button.send-button.submit",
+      "button[aria-label*='发送'].send-button",
+      "button[aria-label*='Send'].send-button",
+      "button[aria-label*='发送消息']",
+      "button[aria-label*='Send message']",
+      "button[type='submit']",
+      "[role='button'][aria-label*='发送']",
+      "[role='button'][aria-label*='Send']"
+    ].map((selector) => scope.querySelector(selector)).find((button) => {
+      return isSendButton(button) && isSendButtonEnabled(button);
     }) || null;
   }
 
+  function isSendButton(button) {
+    if (!button) {
+      return false;
+    }
+    if (button.closest(".cgqa-root")) {
+      return false;
+    }
+    const text = getNodeControlText(button);
+    const className = String(button.className || "");
+    if (/停止|stop|上传|附件|attach|麦克风|语音|voice|图片|image/.test(text)) {
+      return false;
+    }
+    return /发送|send|submit/.test(text)
+      || className.includes("send-button")
+      || button.matches("button[type='submit']");
+  }
+
   function isSendButtonEnabled(button) {
-    return Boolean(button && !button.disabled && button.getAttribute("aria-disabled") !== "true" && button.tabIndex !== -1);
+    return Boolean(button
+      && !button.disabled
+      && button.getAttribute("aria-disabled") !== "true"
+      && isVisibleElement(button));
   }
 
   async function waitForSendButton() {
@@ -1229,23 +1429,41 @@
   }
 
   async function submitPrompt(text) {
+    setMainComposerHidden(false);
+    setNativeGenerationControlsHidden(false);
+    inputBlocker.setBlocked(false);
+
     if (!setPromptText(text)) {
       throw new Error("找不到 Gemini 主输入框。");
     }
 
     await new Promise((resolve) => setTimeout(resolve, 250));
+    const initialResponseGenerating = isResponseGenerating();
     const initialUserTurnCount = getUserTurnCount();
     const button = await waitForSendButton();
     if (button) {
       clickElement(button);
-      if (await waitForSubmissionStarted(initialUserTurnCount, text, 4200)) {
+      if (await waitForSubmissionStarted(initialUserTurnCount, text, initialResponseGenerating, 4200)) {
+        blurActiveElement();
+        return;
+      }
+      if (typeof button.click === "function") {
+        button.click();
+      }
+      if (await waitForSubmissionStarted(initialUserTurnCount, text, initialResponseGenerating, 2500)) {
         blurActiveElement();
         return;
       }
     }
 
     pressEnterOnPrompt();
-    if (await waitForSubmissionStarted(initialUserTurnCount, text, 2200)) {
+    if (await waitForSubmissionStarted(initialUserTurnCount, text, initialResponseGenerating, 3000)) {
+      blurActiveElement();
+      return;
+    }
+
+    submitComposerForm();
+    if (await waitForSubmissionStarted(initialUserTurnCount, text, initialResponseGenerating, 2500)) {
       blurActiveElement();
       return;
     }
@@ -1255,7 +1473,6 @@
 
   async function completePendingResponse() {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    clearPromptText();
     blurActiveElement();
   }
 
@@ -1265,14 +1482,17 @@
     if (isStopButton(preferred)) {
       return preferred;
     }
-    return Array.from(composer.querySelectorAll("button")).find(isStopButton) || null;
+    return Array.from(composer.querySelectorAll("[role='button'], button")).find(isStopButton)
+      || Array.from(document.querySelectorAll("[role='button'], button")).find(isStopButton)
+      || null;
   }
 
   function isStopButton(button) {
     return Boolean(button
       && !button.disabled
       && button.getAttribute("aria-disabled") !== "true"
-      && /停止|stop/i.test(getNodeControlText(button)));
+      && /停止|stop|中止|cancel/i.test(getNodeControlText(button))
+      && !/上传|upload|附件|attach|麦克风|microphone|语音|voice|图片|image/.test(getNodeControlText(button)));
   }
 
   function clearPromptText() {
@@ -1306,6 +1526,7 @@
       bubbles: true,
       cancelable: true,
       view: window,
+      composed: true,
       clientX: rect.left + rect.width / 2,
       clientY: rect.top + rect.height / 2
     };
@@ -1330,17 +1551,51 @@
       keyCode: 13,
       which: 13,
       bubbles: true,
-      cancelable: true
+      cancelable: true,
+      composed: true
     };
     editor.dispatchEvent(new KeyboardEvent("keydown", eventInit));
     editor.dispatchEvent(new KeyboardEvent("keypress", eventInit));
     editor.dispatchEvent(new KeyboardEvent("keyup", eventInit));
   }
 
-  async function waitForSubmissionStarted(initialUserTurnCount, promptText, timeoutMs) {
+  function submitComposerForm() {
+    const editor = getPromptEditor();
+    const composer = getComposerContainer();
+    const form = editor && editor.closest("form") || composer && composer.closest("form");
+    if (!form || form.closest(".cgqa-root")) {
+      return false;
+    }
+    const button = findSendButton();
+    try {
+      if (typeof form.requestSubmit === "function") {
+        if (button && button.type === "submit") {
+          form.requestSubmit(button);
+        } else {
+          form.requestSubmit();
+        }
+        return true;
+      }
+    } catch (_error) {
+      // Fall through to dispatching a submit event for custom form wrappers.
+    }
+    try {
+      form.dispatchEvent(new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        submitter: button || null
+      }));
+    } catch (_error) {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true, composed: true }));
+    }
+    return true;
+  }
+
+  async function waitForSubmissionStarted(initialUserTurnCount, promptText, initialResponseGenerating, timeoutMs) {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      if (hasSubmissionStarted(initialUserTurnCount, promptText)) {
+      if (hasSubmissionStarted(initialUserTurnCount, promptText, initialResponseGenerating)) {
         return true;
       }
       await new Promise((resolve) => setTimeout(resolve, 120));
@@ -1348,14 +1603,24 @@
     return false;
   }
 
-  function hasSubmissionStarted(initialUserTurnCount, promptText) {
-    if (getUserTurnCount() > initialUserTurnCount || getPromptText() === "") {
+  function hasSubmissionStarted(initialUserTurnCount, promptText, initialResponseGenerating) {
+    const trackingToken = extractTrackingToken(promptText);
+    if (trackingToken && getAllTurnRecords().some((record) => {
+      return record.role === "user" && record.text.includes(trackingToken);
+    })) {
       return true;
     }
-    const trackingToken = extractTrackingToken(promptText);
-    return Boolean(trackingToken && getAllTurnRecords().some((record) => {
-      return record.role === "user" && record.text.includes(trackingToken);
-    }));
+    if (getUserTurnCount() > initialUserTurnCount) {
+      return true;
+    }
+    if (getPromptText() === "") {
+      return true;
+    }
+    return Boolean(
+      !initialResponseGenerating
+      && isResponseGenerating()
+      && getPromptText() === ""
+    );
   }
 
   function extractTrackingToken(text) {
@@ -1390,6 +1655,7 @@
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
     isResponseGenerating,
+    stopGeneration,
     completePendingResponse,
     getScrollContainer,
     submitPrompt

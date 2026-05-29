@@ -72,6 +72,9 @@ Before committing changes that touch quote selection, mark rendering, sending, c
 - Select inline code such as `<code>mypipe 数组长度太短</code>`; it should render a normal text highlight and chip. Block code inside `pre` should remain conservative.
 - Delete a thread; both the text mark and sibling chip are removed.
 - Use a thinking model; the sidebar does not capture `正在思考` as the final answer.
+- During streaming generation, the page should not auto-scroll downward, but the user can still manually scroll to inspect content.
+- During sidebar generation, the send button shows a square status icon; overflow content shows dots while generating and a down arrow after completion.
+- Clicking the square generation button stops the provider response and saves the partial sidebar reply without leaving a generating message.
 - Captured sidebar output does not include plugin chips, hidden prompts, or tracking tokens.
 - Saving or deleting a thread updates the storage conversation index used by the management page.
 - The management page reads structured storage data only; do not scan ChatGPT DOM to reconstruct question history.

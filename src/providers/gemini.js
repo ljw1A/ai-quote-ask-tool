@@ -43,6 +43,7 @@
     return {
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
+      requiresVisibleProviderUiDuringSubmit: true,
       matchesLocation,
       getConversationId: CGQAGeminiDom.getConversationId,
       getConversationMeta,
@@ -64,6 +65,7 @@
       setNativeGenerationControlsHidden: CGQAGeminiDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQAGeminiDom.syncPendingResponseState,
       isResponseGenerating: CGQAGeminiDom.isResponseGenerating,
+      stopGeneration: CGQAGeminiDom.stopGeneration,
       completePendingResponse: CGQAGeminiDom.completePendingResponse,
       getScrollContainer: CGQAGeminiDom.getScrollContainer,
       submitPrompt: CGQAGeminiDom.submitPrompt

@@ -6,6 +6,7 @@
   const PANEL_DEFAULT_RIGHT = 28;
   const PANEL_DEFAULT_TOP = 140;
   const INPUT_MAX_HEIGHT = 96;
+  const MESSAGE_SCROLL_BOTTOM_THRESHOLD = 6;
   const ATTACHED_SELECTION_BUTTON_CLASS = "cgqa-selection-attached-button";
 
   let panelPosition = readPanelPosition();
@@ -46,9 +47,11 @@
 
   function getIconPaths(name) {
     const icons = {
+      arrowDown: ["M12 5v14", "M19 12l-7 7-7-7"],
       arrowUp: ["M12 19V5", "M5 12l7-7 7 7"],
       chevronUp: ["M6 15l6-6 6 6"],
       refresh: ["M21 12a9 9 0 0 1-15.4 6.4L3 16", "M3 21v-5h5", "M3 12A9 9 0 0 1 18.4 5.6L21 8", "M21 3v5h-5"],
+      square: ["M6 6h12v12H6z"],
       message: [
         "M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z",
         "M8 9h8",
@@ -95,18 +98,55 @@
   function buildSidebar(callbacks) {
     let root = null;
     let input = null;
+    let renderedThreadId = "";
+    let pendingMessageScrollMode = "";
+    const messageScrollByThreadId = {};
 
-    function render(thread) {
+    function render(thread, options = {}) {
       if (!thread) {
         removePanel();
         root = null;
         input = null;
+        renderedThreadId = "";
+        pendingMessageScrollMode = "";
         return;
       }
 
-      root = createPanel(callbacks, thread);
+      const sameThread = Boolean(thread.threadId && thread.threadId === renderedThreadId);
+      const previousMessageScroll = sameThread
+        ? captureMessageScroll(root) || messageScrollByThreadId[thread.threadId] || null
+        : messageScrollByThreadId[thread.threadId] || null;
+      const requestedScrollMode = normalizeMessageScrollMode(options.messageScrollMode);
+      const messageScrollMode = pendingMessageScrollMode === "bottom" || requestedScrollMode === "bottom" || !sameThread
+        ? "bottom"
+        : "preserve";
+      pendingMessageScrollMode = "";
+
+      root = createPanel(callbacks, thread, {
+        messageScrollMode,
+        previousMessageScroll,
+        onMessageScroll: (scrollState) => rememberMessageScroll(thread.threadId, scrollState),
+        onRequestMessageScrollToBottom: requestMessageScrollToBottom
+      });
       input = root.querySelector(".cgqa-input");
+      renderedThreadId = thread.threadId || "";
       syncPanelToViewport(root);
+    }
+
+    function requestMessageScrollToBottom() {
+      pendingMessageScrollMode = "bottom";
+      const messages = getMessageScrollElement(root);
+      if (messages && !isMessageScrollAtBottom(messages)) {
+        scrollMessagesToBottom(messages);
+        rememberMessageScroll(renderedThreadId, captureMessagesScroll(messages));
+      }
+    }
+
+    function rememberMessageScroll(threadId, scrollState) {
+      if (!threadId || !scrollState) {
+        return;
+      }
+      messageScrollByThreadId[threadId] = scrollState;
     }
 
     function focusInput() {
@@ -135,6 +175,8 @@
       removePanel();
       root = null;
       input = null;
+      renderedThreadId = "";
+      pendingMessageScrollMode = "";
     }
 
     window.addEventListener("resize", handleResize);
@@ -142,7 +184,7 @@
     return { render, focusInput, isOpen, destroy };
   }
 
-  function createPanel(callbacks, thread) {
+  function createPanel(callbacks, thread, options = {}) {
     removePanel();
 
     const panel = createElement("aside", "cgqa-root is-open");
@@ -165,8 +207,10 @@
     bindPanelDrag(panel, header);
 
     const quote = createElement("blockquote", "cgqa-quote-preview", thread.quoteText || "");
+    const messagesShell = createElement("div", "cgqa-messages-shell");
     const messages = createElement("div", "cgqa-messages");
     const assistantLabel = getAssistantLabel(callbacks, thread);
+    const generating = hasGeneratingMessage(thread);
     if (!thread.messages || thread.messages.length === 0) {
       messages.append(createElement("div", "cgqa-empty", "还没有围绕这段内容的提问。"));
     } else {
@@ -183,13 +227,21 @@
     input.disabled = inputDisabled;
     const send = createElement("button", "cgqa-send-button");
     send.type = "button";
-    send.title = "发送";
+    renderSendButtonState(send, inputDisabled);
     send.disabled = true;
-    send.append(createSvgIcon("arrowUp", "cgqa-svg-icon cgqa-send-icon"));
     const submitQuestion = () => {
+      if (inputDisabled) {
+        if (typeof callbacks.onStopGeneration === "function") {
+          callbacks.onStopGeneration();
+        }
+        return;
+      }
       if (!canSubmitInput(input, inputDisabled)) {
         updateSendState(input, send, inputDisabled);
         return;
+      }
+      if (typeof options.onRequestMessageScrollToBottom === "function") {
+        options.onRequestMessageScrollToBottom();
       }
       if (callbacks.onBeforeSend) {
         callbacks.onBeforeSend();
@@ -219,12 +271,151 @@
     actions.append(deleteThread, replyStyle.control, replyStyle.editor);
     footer.append(inputRow, actions);
 
-    panel.append(header, quote, messages, footer);
+    const scrollStatus = createMessageScrollStatusButton(generating, () => {
+      scrollMessagesToBottom(messages);
+      reportMessageScroll(messages, options);
+      updateMessageScrollStatus(messages, scrollStatus, generating);
+    });
+    messagesShell.append(messages, scrollStatus);
+    panel.append(header, quote, messagesShell, footer);
+    bindMessageScroll(messages, options, scrollStatus, generating);
     appendOverlayRoot(panel);
     autoResizeInput(input);
     updateSendState(input, send, inputDisabled);
-    messages.scrollTop = messages.scrollHeight;
+    applyMessageScroll(messages, options);
+    updateMessageScrollStatus(messages, scrollStatus, generating);
     return panel;
+  }
+
+  function getMessageScrollElement(root) {
+    return root && root.querySelector(".cgqa-messages");
+  }
+
+  function captureMessageScroll(root) {
+    const messages = getMessageScrollElement(root);
+    return captureMessagesScroll(messages);
+  }
+
+  function captureMessagesScroll(messages) {
+    if (!messages) {
+      return null;
+    }
+    return {
+      top: messages.scrollTop
+    };
+  }
+
+  function normalizeMessageScrollMode(mode) {
+    return mode === "bottom" || mode === "preserve" ? mode : "";
+  }
+
+  function applyMessageScroll(messages, options = {}) {
+    if (!messages) {
+      return;
+    }
+    if (options.messageScrollMode === "preserve" && options.previousMessageScroll) {
+      restoreMessageScroll(messages, options.previousMessageScroll);
+      reportMessageScroll(messages, options);
+      return;
+    }
+    scrollMessagesToBottom(messages);
+    reportMessageScroll(messages, options);
+  }
+
+  function restoreMessageScroll(messages, scrollState) {
+    const maxTop = Math.max(0, messages.scrollHeight - messages.clientHeight);
+    const top = Number(scrollState && scrollState.top);
+    messages.scrollTop = Number.isFinite(top) ? Math.min(Math.max(0, top), maxTop) : 0;
+  }
+
+  function scrollMessagesToBottom(messages) {
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function isMessageScrollAtBottom(messages) {
+    return messages.scrollHeight - messages.scrollTop - messages.clientHeight <= MESSAGE_SCROLL_BOTTOM_THRESHOLD;
+  }
+
+  function bindMessageScroll(messages, options = {}, scrollStatus, generating) {
+    messages.addEventListener("scroll", () => {
+      reportMessageScroll(messages, options);
+      updateMessageScrollStatus(messages, scrollStatus, generating);
+    }, { passive: true });
+    messages.addEventListener("wheel", (event) => {
+      const deltaY = getWheelDeltaY(event, messages);
+      if (!deltaY) {
+        return;
+      }
+      const previousTop = messages.scrollTop;
+      const maxTop = Math.max(0, messages.scrollHeight - messages.clientHeight);
+      const nextTop = Math.min(Math.max(0, previousTop + deltaY), maxTop);
+      if (nextTop === previousTop) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      messages.scrollTop = nextTop;
+      reportMessageScroll(messages, options);
+      updateMessageScrollStatus(messages, scrollStatus, generating);
+    }, { passive: false });
+  }
+
+  function getWheelDeltaY(event, messages) {
+    if (!event) {
+      return 0;
+    }
+    if (event.deltaMode === 2) {
+      return event.deltaY * messages.clientHeight;
+    }
+    if (event.deltaMode === 1) {
+      return event.deltaY * 18;
+    }
+    return event.deltaY;
+  }
+
+  function reportMessageScroll(messages, options = {}) {
+    if (typeof options.onMessageScroll === "function") {
+      options.onMessageScroll(captureMessagesScroll(messages));
+    }
+  }
+
+  function createMessageScrollStatusButton(generating, onClick) {
+    const button = createElement("button", "cgqa-message-scroll-status");
+    button.type = "button";
+    button.addEventListener("click", onClick);
+    renderMessageScrollStatusButton(button, generating);
+    return button;
+  }
+
+  function updateMessageScrollStatus(messages, button, generating) {
+    if (!button || !messages) {
+      return;
+    }
+    button.hidden = !hasHiddenMessageContentBelow(messages);
+    renderMessageScrollStatusButton(button, generating);
+  }
+
+  function hasHiddenMessageContentBelow(messages) {
+    return messages.scrollHeight - messages.scrollTop - messages.clientHeight > MESSAGE_SCROLL_BOTTOM_THRESHOLD;
+  }
+
+  function renderMessageScrollStatusButton(button, generating) {
+    const state = generating ? "generating" : "ready";
+    if (button.dataset.state !== state || !button.firstChild) {
+      button.replaceChildren(generating ? createStatusDots() : createSvgIcon("arrowDown", "cgqa-svg-icon cgqa-message-scroll-icon"));
+      button.dataset.state = state;
+    }
+    const label = generating ? "正在生成，点击滚动到底部" : "滚动到底部";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  }
+
+  function createStatusDots() {
+    const dots = createElement("span", "cgqa-scroll-status-dots");
+    for (let index = 0; index < 3; index += 1) {
+      dots.append(createElement("span", "cgqa-scroll-status-dot"));
+    }
+    return dots;
   }
 
   function canSubmitInput(input, inputDisabled) {
@@ -425,7 +616,19 @@
     if (!send) {
       return;
     }
-    send.disabled = !canSubmitInput(input, inputDisabled);
+    renderSendButtonState(send, inputDisabled);
+    send.disabled = inputDisabled ? false : !canSubmitInput(input, inputDisabled);
+  }
+
+  function renderSendButtonState(send, generating) {
+    const state = generating ? "generating" : "ready";
+    if (send.dataset.state !== state || !send.firstChild) {
+      send.replaceChildren(createSvgIcon(generating ? "square" : "arrowUp", "cgqa-svg-icon cgqa-send-icon"));
+      send.dataset.state = state;
+    }
+    send.classList.toggle("is-generating", generating);
+    send.title = generating ? "正在生成" : "发送";
+    send.setAttribute("aria-label", send.title);
   }
 
   function autoResizeInput(input) {

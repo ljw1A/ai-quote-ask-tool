@@ -64,6 +64,7 @@
       setNativeGenerationControlsHidden: CGQADeepSeekDom.setNativeGenerationControlsHidden,
       syncPendingResponseState: CGQADeepSeekDom.syncPendingResponseState,
       isResponseGenerating: CGQADeepSeekDom.isResponseGenerating,
+      stopGeneration: CGQADeepSeekDom.stopGeneration,
       completePendingResponse: CGQADeepSeekDom.completePendingResponse,
       getScrollContainer: CGQADeepSeekDom.getScrollContainer,
       submitPrompt: CGQADeepSeekDom.submitPrompt

@@ -1275,7 +1275,48 @@
   }
 
   function isResponseGenerating() {
-    return Boolean(findStopButton());
+    return isVisibleIgnoringPluginHiddenClass(findStopButton());
+  }
+
+  async function stopGeneration() {
+    document.querySelectorAll(`.${HIDDEN_NATIVE_CONTROL_CLASS}`).forEach(unhideNativeGenerationControl);
+    const button = findStopButton();
+    if (!button) {
+      return false;
+    }
+    unhideNativeGenerationControl(button);
+    clickElement(button);
+    if (typeof button.click === "function") {
+      button.click();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return true;
+  }
+
+  function isVisibleIgnoringPluginHiddenClass(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const hadHiddenClass = element.classList.contains(HIDDEN_NATIVE_CONTROL_CLASS);
+    if (hadHiddenClass) {
+      element.classList.remove(HIDDEN_NATIVE_CONTROL_CLASS);
+    }
+    try {
+      return isVisibleElement(element);
+    } finally {
+      if (hadHiddenClass) {
+        element.classList.add(HIDDEN_NATIVE_CONTROL_CLASS);
+      }
+    }
+  }
+
+  function isVisibleElement(element) {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0
+      && rect.height > 0
+      && style.display !== "none"
+      && style.visibility !== "hidden";
   }
 
   function setThinkingControlsHidden(hidden) {
@@ -1295,6 +1336,8 @@
     return [
       node.getAttribute("aria-label") || "",
       node.getAttribute("title") || "",
+      node.getAttribute("data-testid") || "",
+      node.getAttribute("class") || "",
       node.textContent || ""
     ].join(" ").toLowerCase();
   }
@@ -1413,14 +1456,17 @@
     if (isStopButton(preferred)) {
       return preferred;
     }
-    return Array.from(composer.querySelectorAll("button")).find(isStopButton) || null;
+    return Array.from(composer.querySelectorAll("[role='button'], button")).find(isStopButton)
+      || Array.from(document.querySelectorAll("[role='button'], button")).find(isStopButton)
+      || null;
   }
 
   function isStopButton(button) {
     return Boolean(button
       && !button.disabled
       && button.getAttribute("aria-disabled") !== "true"
-      && /停止|stop|中止|cancel/i.test(getNodeControlText(button)));
+      && /停止|stop|中止|cancel/i.test(getNodeControlText(button))
+      && !/上传|upload|附件|attach|麦克风|microphone|语音|voice|图片|image/.test(getNodeControlText(button)));
   }
 
   function clearPromptText() {
@@ -1529,6 +1575,7 @@
     setNativeGenerationControlsHidden,
     syncPendingResponseState,
     isResponseGenerating,
+    stopGeneration,
     completePendingResponse,
     getScrollContainer,
     submitPrompt
